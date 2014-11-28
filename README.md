@@ -36,8 +36,10 @@ I've included some default options, open server.js/imgui.html and help yourself
 Client Dependencies
 ===================
 
-ThreeJS - https://github.com/mrdoob/three.js/
+ThreeJS - https://github.com/mrdoob/three.js
+
 Modified LZ4.js - https://github.com/ukyo/lz4.js
+
 Dat.Gui - https://github.com/dataarts/dat.gui
 
 Setup Host
