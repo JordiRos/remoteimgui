@@ -11,6 +11,7 @@ Encoded data uses a previous frema delta + LZ4 encoding. Delta ensures that most
 
 Host device can also listen to remote device messages (mouse and keyboard events), allowing interacting from the remote side too.
 
+
 Setup Client
 ============
 
@@ -19,11 +20,17 @@ HTML is reduced to this simple line for the whole app
 StartImgui(container, "ws://host:port", width,height, font, compressed, background);
 
 Container - the element where to render ImGui
+
 Host:Port - is address of remote device ImGui app
+
 Width/Height - target device resolution
+
 Font - the exact same font file you used in your device
+
 Compressed - compression flag (recommended!)
+
 Background - background image
+
 
 As WebGL needs to load images for the font and background, I've included a simple NodeJS server that will create a remote ImGui connection in a simple, fullscreen app
 
@@ -32,6 +39,7 @@ Run "node server.js"
 Open browser and type "http://localhost/imgui?host=your_host"
 
 I've included some default options, open server.js/imgui.html and help yourself
+
 
 Client Dependencies
 ===================
@@ -42,11 +50,13 @@ Modified LZ4.js - https://github.com/ukyo/lz4.js
 
 Dat.Gui - https://github.com/dataarts/dat.gui
 
+
 Setup Host
 ==========
 
 This relies on your imconfig implementation, so what I've included is an implementation over one of the existing Imgui examples.
 It should be easy to copy & paste from this example to your app (just an include and a few blocks of code)
+
 
 Websockets
 ==========
