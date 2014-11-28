@@ -55,8 +55,8 @@ Setup Host
 ==========
 
 This relies on your imconfig implementation, so what I've included is an implementation over one of the existing Imgui examples.
-It should be easy to copy & paste from this example to your app (just an include and a few blocks of code)
-
+It should be easy to copy & paste from this example to your app (just an include and a few blocks of code).
+No core ImGui modifications required at all
 
 Websockets
 ==========
