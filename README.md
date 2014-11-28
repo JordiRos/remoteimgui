@@ -14,14 +14,6 @@ Host device can also listen to remote device messages (mouse and keyboard events
 Setup Client
 ============
 
-As WebGL needs to load images for the font and background, I've included a simple NodeJS server that will create a remote ImGui connection in a simple, fullscreen app.
-
-Run "node server.js"
-
-Open browser and type "http://localhost/imgui?host=your_host
-
-I've included some default options, open server.js/imgui.html and edit yourself.
-
 HTML is reduced to this simple line for the whole app
 
 StartImgui(container, "ws://host:port", width,height, font, compressed, background);
@@ -32,6 +24,14 @@ Width/Height - target device resolution
 Font - the exact same font file you used in your device
 Compressed - compression flag (recommended!)
 Background - background image
+
+As WebGL needs to load images for the font and background, I've included a simple NodeJS server that will create a remote ImGui connection in a simple, fullscreen app
+
+Run "node server.js"
+
+Open browser and type "http://localhost/imgui?host=your_host"
+
+I've included some default options, open server.js/imgui.html and help yourself
 
 Client Dependencies
 ===================
