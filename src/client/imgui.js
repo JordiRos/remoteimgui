@@ -1,6 +1,8 @@
+//-----------------------------------------------------------------------------
 // Remote Imgui for https://github.com/ocornut/imgui
 // https://github.com/JordiRos/remoteimgui
 // Jordi Ros
+//-----------------------------------------------------------------------------
 
 // utility function to parse an arraybuffer like a stream
 function DataStream( data ) {
@@ -21,7 +23,7 @@ function DataStream( data ) {
     return stream;
 }
 
-// ThreeJS shader to render with clipping region
+// threejs shader to render with clipping region
 var ImVS = [
     "varying vec3 vColor;",
     "varying vec2 vUv;",
@@ -367,7 +369,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             renderer.setClearColor( 0x303030 );
             renderer.clear( true, true, false );
 
-            // render background (visual reference)
+            // render background (visual reference of device canvas)
             renderer.render( scene_background, camera );
 
             // render command lists (or selected one)

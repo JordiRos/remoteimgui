@@ -1,6 +1,11 @@
+//-----------------------------------------------------------------------------
 // Remote Imgui for https://github.com/ocornut/imgui
 // https://github.com/JordiRos/remoteimgui
 // Jordi Ros
+//-----------------------------------------------------------------------------
+
+// usage: http://localhost/imgui?host=your_device_ip
+// set port, device_width, device_height and font.png to be the same as in your device imgui
 
 var http = require("http"),
     url = require("url"),
