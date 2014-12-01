@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html><head>
+<title>Remote ImGui</title>
+<meta charset="UTF-8">
+<script type="text/javascript" src="imgui/three.min.js"></script>
+<script type="text/javascript" src="imgui/detector.js"></script>
+<script type="text/javascript" src="imgui/lz4.js"></script>
+<script type="text/javascript" src="imgui/dat.gui.min.js"></script>
+<script type="text/javascript" src="imgui.js"></script>
+<link  href="imgui/main.css" rel="stylesheet"/>
+
+<style>
+    #imgui_container
+    {
+        touch-action: none; /* Disable touch behaviors, like pan and zoom */
+    }
+</style>
+
+</head>
+<body>
+    <div id="imgui_container"></div>
+
+    <script type="text/javascript">
+        StartImgui(document.getElementById('imgui_container'), "ws://$$host:$$port", $$device_width, $$device_height, "$$font", $$compressed, "imgui/background.jpg" );
+    </script>
+
+</body>
+</html>
