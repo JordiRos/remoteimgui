@@ -63,4 +63,4 @@ Sad news is that I spent far more time looking for / building a C++ websockets s
 ToDo
 ============
 
-- It would be nice if remote worked on touch devices
+- Client works ok on iOS / Android + WebGL, but input is not handled (yet!)
