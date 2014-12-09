@@ -29,7 +29,7 @@ Dependencies
 
 LZ4 - https://code.google.com/p/lz4/
 
-Modified Webby -  https://github.com/deplinenoise/webby
+Modified Webby - https://github.com/deplinenoise/webby
 
 I've added a Webby implementation for the WebSocketServer connection. It supports Win32 + Unix, but it should be quite easy to add other platforms. I included Webby on the repo as I added a function to allow sending WebSocket packets in a single frame.
 
@@ -64,6 +64,8 @@ I've included some default options, edit **server.js** and **imgui.html** to con
 
 Dependencies
 ============
+
+All included in **src/client**
 
 ThreeJS - *https://github.com/mrdoob/three.js*
 
