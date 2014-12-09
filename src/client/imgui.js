@@ -47,7 +47,7 @@ var ImFS = [
     "uniform sampler2D tTex;",
 
     "void main() {",
-        "if ( ( vPos.x >= uClip.x && vPos.y >= uClip.y && vPos.x < uClip.z && vPos.y < uClip.w ) || uClip.z == -9999.0 && uClip.w == -9999.0 )",
+        "if( ( vPos.x >= uClip.x && vPos.y >= uClip.y && vPos.x < uClip.z && vPos.y < uClip.w ) || uClip.z == -9999.0 && uClip.w == -9999.0 )",
             "gl_FragColor = texture2D( tTex, vUv ) * vec4( vColor, 1.0 );",
         "else",
             "gl_FragColor = vec4( 0.0, 0.0, 0.0, 0.0 );",
@@ -60,7 +60,7 @@ var ImguiGui = function() {
 
 function StartImgui( element, serveruri, targetwidth, targetheight, targetfonttex, compressed, backgroundtex ) {
 
-    if ( !Detector.webgl ) Detector.addGetWebGLMessage();
+    if( !Detector.webgl ) Detector.addGetWebGLMessage();
 
     var gui = new dat.GUI();
     var datgui = new ImguiGui();
@@ -73,6 +73,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     var targetheight = targetheight;
     var fonttex = THREE.ImageUtils.loadTexture( targetfonttex );
     var clientactive = false;
+    var frame = 0;
+    var mouse = { x: 0, y: 0, l: 0, r: 0, w: 0, update: false };
     var cur_vtx;
     var prev_data;
 
@@ -140,7 +142,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     var gclips = [];
 
     // fill indices (fixed for the whole geometry)
-    for ( var i = 0; i < MAX_TRIANGLES*3; i++ )
+    for( var i = 0; i < MAX_TRIANGLES*3; i++ )
         gindices[i] = i;
     geometry.attributes.index.needsUpdate = true;
 
@@ -183,8 +185,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         onRender();
     };
     websocket.onmessage = function( evt ) {
-        if ( typeof evt.data == "string" ) {
-            if ( evt.data == "ImInit" )
+        if( typeof evt.data == "string" ) {
+            if( evt.data == "ImInit" )
             {
                 console.log( "ImInit OK" );
                 clientactive = true;
@@ -194,7 +196,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         }
         else {
             var data;
-            if ( compressed ) {
+            if( compressed ) {
                 // log decompress time
                 //var t = performance.now();
                 data = lz4.decompress( new Uint8Array( evt.data ) ).buffer;
@@ -205,10 +207,10 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
 
             // IsKey frame? compose with previous data
             var buffer = new Int8Array( data );
-            if ( buffer[ 0 ] == 0 ) {
+            if( buffer[ 0 ] == 0 ) {
                 var prev_buffer = new Int8Array( prev_data );
-                for ( var i = 1; i < buffer.length; i++ ) {
-                    if ( i < prev_buffer.length ) {
+                for( var i = 1; i < buffer.length; i++ ) {
+                    if( i < prev_buffer.length ) {
                         buffer[ i ] = buffer[ i ] + prev_buffer[ i ];
                     }
                 }
@@ -232,81 +234,82 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     onRender();
 
     function onMouseMove( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         
-        if (camera_drag) {
+        if( camera_drag ) {
             camera_offset.x += camera_drag_pos.x - event.clientX;
             camera_offset.y += camera_drag_pos.y - event.clientY;
             camera_drag_pos.x = event.clientX;
             camera_drag_pos.y = event.clientY;
         }
         else {
-            var x = event.clientX + camera.position.x;
-            var y = event.clientY + camera.position.y;
-            if (clientactive)
-                websocket.send("ImMouseMove=" + x + "," + y);
+            mouse.x = event.clientX + camera.position.x;
+            mouse.y = event.clientY + camera.position.y;
+            mouse.update = true;
         }
     }
 
     function onMouseDown( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         event.preventDefault();
-        if (event.button == 0) mouse_left = 1;
-        if (event.button == 2) { mouse_right = 1; }
+        if( event.button == 0 ) mouse_left = 1;
+        if( event.button == 2 ) mouse_right = 1;
         camera_drag = event.ctrlKey;
-        if (camera_drag) {
+        if( camera_drag ) {
             camera_drag_pos.x = event.clientX;
             camera_drag_pos.y = event.clientY;
         }
         else {
-            if (clientactive)
-                websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
+            mouse.l = mouse_left;
+            mouse.r = mouse_right;
+            mouse.update = true;
         }
     }    
 
     function onMouseUp( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         event.preventDefault();
-        if (event.button == 0) mouse_left = 0;
-        if (event.button == 2) mouse_right = 0;
-        if (camera_drag) {
+        if( event.button == 0 ) mouse_left = 0;
+        if( event.button == 2 ) mouse_right = 0;
+        if( camera_drag ) {
             camera_drag = false;
         }
         else {
-            if (clientactive)
-                websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
+            mouse.l = mouse_left;
+            mouse.r = mouse_right;
+            mouse.update = true;
         }
     }
 
     function onMouseWheel( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         event.preventDefault();
-        if (event.which == 1) mouse_wheel += event.wheelDelta;
-        if (clientactive)
-            websocket.send("ImMouseWheel=" + mouse_wheel);
+        if( event.which == 1 ) mouse_wheel += event.wheelDelta;
+        mouse.w = mouse_wheel;
+        mouse.update = true;
     }            
 
     function onKeyDown( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         event.preventDefault();
-        if (event.which != 0) {
-            websocket.send("ImKeyDown=" + event.which);
+        if( event.which != 0 ) {
+            websocket.send( "ImKeyDown=" + event.which );
         }
     }
 
     function onKeyUp( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         event.preventDefault();
-        if (event.which != 0) {
-            websocket.send("ImKeyUp=" + event.which);
+        if( event.which != 0 ) {
+            websocket.send( "ImKeyUp=" + event.which );
         }
     }    
 
     function onKeyPress( event ) {
-        if (!event) event = window.event;
+        if( !event ) event = window.event;
         event.preventDefault();
-        if (event.which != 0) {
-            websocket.send("ImKeyPress=" + event.which);
+        if( event.which != 0 ) {
+            websocket.send( "ImKeyPress=" + event.which );
         }
     }
 
@@ -317,7 +320,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         gclips.length = 0;
         cur_vtx = 0;
         // command lists
-        for ( var i = 0; i < gcmdcount; i++ ) {
+        for( var i = 0; i < gcmdcount; i++ ) {
             var num = data.readUint32();
             var x = data.readFloat32();
             var y = data.readFloat32();
@@ -331,7 +334,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             cur_vtx+= num;
         }
         // all vertices
-        for ( var i = 0; i < gvtxcount; i++ ) {
+        for( var i = 0; i < gvtxcount; i++ ) {
             addVtx( data, i )
         }
         geometry.attributes.position.needsUpdate = true;
@@ -373,7 +376,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             renderer.render( scene_background, camera );
 
             // render command lists (or selected one)
-            for ( var i = 0; i < gclips.length; i++ ) {
+            for( var i = 0; i < gclips.length; i++ ) {
                 //if ( idx == -1 || idx == i ) {
                 {
                     geometry.offsets[ 0 ].start = gclips[ i ].start;
@@ -392,14 +395,24 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             renderer.clear( true, true, false );
         }
 
-        // no need, will render each time we receive a packet
-        //requestAnimationFrame( onRender );
+        // send input events
+        requestAnimationFrame( onUpdateInput );
+    }
+
+    function onUpdateInput() {
+        requestAnimationFrame( onUpdateInput );
+        frame++;
+        if( mouse.update ) {
+            if (clientactive)
+                websocket.send( "ImMouse=" + mouse.x + "," + mouse.y + "," + mouse.l + "," + mouse.r + "," + mouse.w );
+            mouse.update = false;
+        }
     }
 
     function onUpdateGui() {
-        if  ( datgui.windows.length != ( gcmdcount+1 ) ) {
+        if ( datgui.windows.length != ( gcmdcount+1 ) ) {
             datgui.windows = [ 'Origin' ];
-            for ( var i = 0; i < gcmdcount; i++ )
+            for( var i = 0; i < gcmdcount; i++ )
                 datgui.windows[ i+1 ] = i+1;
             gui.remove( datgui_window );
             datgui_window = gui.add( datgui, 'window', datgui.windows );
