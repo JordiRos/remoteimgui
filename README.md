@@ -4,7 +4,7 @@ Remote ImGui
 Remote ImGui is an extension for https://github.com/ocornut/imgui to allow viewing and interacting with an ImGui app from another device in the same network. Client is an HTML5/WebGL/WebSockets(v13) application, so just open a compatible browser and enjoy!
 
 The basic principle is that ImGui app will encode and send all rendering data to a Websockets client, so client will render exactly what you see in your host app.
-Encoded data uses a previous frema delta + LZ4 encoding - this ensures that most of the time there will be zeroes, so this is very easy and fast to compress and decompress (even with JS). Keyframes of full data are/can be sent periodically.
+Encoded data uses a previous frema delta + LZ4 encoding - this ensures that most of the time there will be zeroes or offset patterns, so this is very easy and fast to compress and decompress (even with JS). Keyframes of full data are/can be sent periodically.
 
 Client also sends input from mouse/keyboard, allowing interaction with host app from remote.
 
