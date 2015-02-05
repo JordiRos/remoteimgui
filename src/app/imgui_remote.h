@@ -1,14 +1,16 @@
 //-----------------------------------------------------------------------------
-// Remote Imgui for https://github.com/ocornut/imgui
-// https://github.com/JordiRos/remoteimgui
-// Jordi Ros
+// Remote ImGui https://github.com/JordiRos/remoteimgui
+// Uses
+// ImGui https://github.com/ocornut/imgui 1.3
+// Webby https://github.com/deplinenoise/webby
+// LZ4   https://code.google.com/p/lz4/
 //-----------------------------------------------------------------------------
 
-#include "lz4/lz4.h"      // https://code.google.com/p/lz4/
+#include "lz4/lz4.h"
 #include <stdio.h>
 #include <vector>
 
-#define IMGUI_REMOTE_KEY_FRAME    30  // send keyframe every 30 frames
+#define IMGUI_REMOTE_KEY_FRAME    60  // send keyframe every 30 frames
 #define IMGUI_REMOTE_INPUT_FRAMES 120 // input valid during 120 frames
 
 namespace ImGui {
@@ -20,14 +22,13 @@ namespace ImGui {
 //------------------
 struct RemoteInput
 {
-	ImVec2	MousePos;
-	bool	MouseButtons[5];
-	float	MouseWheel;
-	bool	KeyCtrl;
-	bool	KeyShift;
-	bool	KeysDown[256];
+    ImVec2	MousePos;
+    int		MouseButtons;
+    int		MouseWheel;
+    bool	KeyCtrl;
+    bool	KeyShift;
+    bool	KeysDown[256];
 };
-
 
 //------------------
 // IWebSocketServer
@@ -65,10 +66,11 @@ struct WebSocketServer : public IWebSocketServer
 	bool ClientActive;
 	int Frame;
 	int FrameReceived;
-	int KeyFrame;
-	int PrevMessageSize;
-	std::vector<unsigned char> Message;
-	std::vector<unsigned char> PrevMessage;
+	int PrevPacketSize;
+	bool IsKeyFrame;
+	bool ForceKeyFrame;
+	std::vector<unsigned char> Packet;
+	std::vector<unsigned char> PrevPacket;
 	RemoteInput Input;
 
 	WebSocketServer()
@@ -76,8 +78,8 @@ struct WebSocketServer : public IWebSocketServer
 		ClientActive = false;
 		Frame = 0;
 		FrameReceived = 0;
-		KeyFrame = -1;
-		PrevMessageSize = 0;
+		IsKeyFrame = false;
+		PrevPacketSize = 0;
 	}
 	
 	virtual void OnMessage(OpCode opcode, const void *data, int size)
@@ -91,33 +93,55 @@ struct WebSocketServer : public IWebSocketServer
 					if (!memcmp(data, "ImInit", 6))
 					{
 						ClientActive = true;
-						KeyFrame = -1;
+						ForceKeyFrame = true;
 						// Send confirmation
 						SendText("ImInit", 6);
+						// Send font texture
+						unsigned char* pixels;
+						int width, height;
+						ImGui::GetIO().Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
+						PreparePacketTexFont(pixels, width, height);
+						SendPacket();
 					}
 				}
-				else if (strstr((char *)data, "ImMouse"))
+				else if (strstr((char *)data, "ImMouseMove"))
 				{
-					int x, y, l, r, w;
-					if (sscanf_s((char *)data, "ImMouse=%d,%d,%d,%d,%d", &x, &y, &l, &r, &w) == 5)
+					int x, y;
+					if (sscanf_s((char *)data, "ImMouseMove=%d,%d", &x, &y) == 2)
 					{
 						FrameReceived = Frame;
 						Input.MousePos.x = (float)x;
 						Input.MousePos.y = (float)y;
-						Input.MouseButtons[0] = l != 0;
-						Input.MouseButtons[1] = r != 0;
-						Input.MouseWheel = (float)w;
-						//printf("MouseMove: %d,%d\n", x,y);
+					}
+				}
+				else if (strstr((char *)data, "ImMousePress"))
+				{
+					int l, r;
+					if (sscanf((char *)data, "ImMousePress=%d,%d", &l, &r) == 2)
+					{
+						FrameReceived = Frame;
+						Input.MouseButtons = l | (r<<1);
+					}
+				}
+				else if (strstr((char *)data, "ImMouseWheel"))
+				{
+					int new_wheel;
+					if (sscanf((char *)data, "ImMouseWheel=%d", &new_wheel) == 1)
+					{
+						FrameReceived = Frame;
+						Input.MouseWheel = new_wheel;
 					}
 				}
 				else if (strstr((char *)data, "ImKeyDown"))
 				{
-					int key;
-					if (sscanf((char *)data, "ImKeyDown=%d", &key) == 1)
+					int key, shift, ctrl;
+					if (sscanf((char *)data, "ImKeyDown=%d,%d,%d", &key, &shift, &ctrl) == 3)
 					{
 						//update key states
 						FrameReceived = Frame;
 						Input.KeysDown[key] = true;
+						Input.KeyShift = shift > 0;
+						Input.KeyCtrl = ctrl > 0;
 					}
 				}
 				else if (strstr((char *)data, "ImKeyUp"))
@@ -128,7 +152,20 @@ struct WebSocketServer : public IWebSocketServer
 						//update key states
 						FrameReceived = Frame;
 						Input.KeysDown[key] = false;
+						Input.KeyShift = false;
+						Input.KeyCtrl = false;
 					}
+				}
+				else if (strstr((char *)data, "ImKeyPress"))
+				{
+					char key;
+					if (sscanf((char *)data, "ImKeyPress=%c", &key) == 1)
+						ImGui::GetIO().AddInputCharacter(key);
+				}
+				else if (strstr((char *)data, "ImClipboard="))
+				{
+					char *clipboard = &((char *)data)[strlen("ImClipboard=")];
+					ImGui::GetIO().SetClipboardTextFn(clipboard);
 				}
 				break;
 			// Binary message
@@ -170,7 +207,7 @@ struct WebSocketServer : public IWebSocketServer
 	{
 		short x,y; // 16 short
 		short u,v; // 16 fixed point
-		unsigned char r,g,b; // 8
+		unsigned char r,g,b,a; // 8*4
 		void Set(const ImDrawVert &vtx)
 		{
 			x = (short)(vtx.pos.x);
@@ -180,81 +217,99 @@ struct WebSocketServer : public IWebSocketServer
 			r = (vtx.col>>0 ) & 0xff;
 			g = (vtx.col>>8 ) & 0xff;
 			b = (vtx.col>>16) & 0xff;
+			a = (vtx.col>>24) & 0xff;
 		}
 	};
 #pragma pack()
 
-	bool IsKey() { return KeyFrame == 0; }
-
-	void Write(unsigned char c) { Message.push_back(c); }
+	void Write(unsigned char c) { Packet.push_back(c); }
 	void Write(unsigned int i)
 	{
-		if (IsKey())
+		if (IsKeyFrame)
 			Write(&i, sizeof(unsigned int));
 		else
 			WriteDiff(&i, sizeof(unsigned int));
 	}
 	void Write(Cmd const &cmd)
 	{
-		if (IsKey())
+		if (IsKeyFrame)
 			Write((void *)&cmd, sizeof(Cmd));
 		else
 			WriteDiff((void *)&cmd, sizeof(Cmd));
 	}
 	void Write(Vtx const &vtx)
 	{
-		if (IsKey())
+		if (IsKeyFrame)
 			Write((void *)&vtx, sizeof(Vtx));
 		else
 			WriteDiff((void *)&vtx, sizeof(Vtx));
 	}
-	void Write(void *data, int size)
+	void Write(const void *data, int size)
 	{
 		unsigned char *src = (unsigned char *)data;
 		for (int i = 0; i < size; i++)
 		{
-			int pos = Message.size();
+			int pos = Packet.size();
 			Write(src[i]);
-			PrevMessage[pos] = src[i];
+			PrevPacket[pos] = src[i];
 		}
 	}
-	void WriteDiff(void *data, int size)
+	void WriteDiff(const void *data, int size)
 	{
 		unsigned char *src = (unsigned char *)data;
 		for (int i = 0; i < size; i++)
 		{
-			int pos = Message.size();
-			Write((unsigned char)(src[i] - (pos < PrevMessageSize ? PrevMessage[pos] : 0)));
-			PrevMessage[pos] = src[i];
+			int pos = Packet.size();
+			Write((unsigned char)(src[i] - (pos < PrevPacketSize ? PrevPacket[pos] : 0)));
+			PrevPacket[pos] = src[i];
 		}
 	}
 
-	void PrepareMessage(unsigned int cmd_count, unsigned int vtx_count)
-	{
-		KeyFrame = (KeyFrame+1) % IMGUI_REMOTE_KEY_FRAME;
-		unsigned int size = sizeof(unsigned char) + 2*sizeof(unsigned int) + cmd_count*sizeof(Cmd) + vtx_count*sizeof(Vtx);
-		Message.clear();
-		Message.reserve(size);
-		PrevMessage.reserve(size);
-		while (size > PrevMessage.size())
-			PrevMessage.push_back(0);
-		Write((unsigned char)(IsKey()?1:0));
-		Write(cmd_count);
-		Write(vtx_count);
-		//printf("ImWebSocket PrepareMessage: cmd_count = %i, vtx_count = %i ( %lu bytes )\n", cmd_count, vtx_count, sizeof(unsigned int) + sizeof(unsigned int) + cmd_count * sizeof(Cmd) + vtx_count * sizeof(Vtx));
-	}
-
-	void SendMessage()
+	void SendPacket()
 	{
 		static int buffer[65536];
-		int size = Message.size();
-		int csize = LZ4_compress_limitedOutput((char *)&Message[0], (char *)(buffer+3), size, 65536*sizeof(int)-12);
+		int size = Packet.size();
+		int csize = LZ4_compress_limitedOutput((char *)&Packet[0], (char *)(buffer+3), size, 65536*sizeof(int)-12);
 		buffer[0] = 0xBAADFEED; // Our LZ4 header magic number (used in custom lz4.js to decompress)
 		buffer[1] = size;
 		buffer[2] = csize;
-		//printf("ImWebSocket SendMessage: %s %d / %d (%.2f%%)\n", IsKey() ? "(KEY)" : "", size, csize, (float)csize * 100.f / size);
+		//printf("ImWebSocket SendPacket: %s %d / %d (%.2f%%)\n", IsKeyFrame ? "(KEY)" : "", size, csize, (float)csize * 100.f / size);
 		SendBinary(buffer, csize+12);
-		PrevMessageSize = size;
+		PrevPacketSize = size;
+	}
+
+	void PreparePacket(unsigned char data_type, unsigned int data_size)
+	{
+		unsigned int size = sizeof(unsigned char) + data_size;
+		Packet.clear();
+		Packet.reserve(size);
+		PrevPacket.reserve(size);
+		while (size > PrevPacket.size())
+			PrevPacket.push_back(0);
+		Write(data_type);
+	}
+
+	// packet types
+	enum { TEX_FONT = 255, FRAME_KEY = 254, FRAME_DIFF = 253 };
+
+	void PreparePacketTexFont(const void *data, unsigned int w, unsigned int h)
+	{
+		IsKeyFrame = true;
+		PreparePacket(TEX_FONT, sizeof(unsigned int)*2 + w*h);
+		Write(w);
+		Write(h);
+		Write(data, w*h);
+		ForceKeyFrame = true;
+	}
+
+	void PreparePacketFrame(unsigned int cmd_count, unsigned int vtx_count)
+	{
+		IsKeyFrame = (Frame%IMGUI_REMOTE_KEY_FRAME) == 0 || ForceKeyFrame;
+		PreparePacket(IsKeyFrame?FRAME_KEY:FRAME_DIFF, 2*sizeof(unsigned int) + cmd_count*sizeof(Cmd) + vtx_count*sizeof(Vtx));
+		Write(cmd_count);
+		Write(vtx_count);
+		//printf("ImWebSocket PreparePacket: cmd_count = %i, vtx_count = %i ( %lu bytes )\n", cmd_count, vtx_count, sizeof(unsigned int) + sizeof(unsigned int) + cmd_count * sizeof(Cmd) + vtx_count * sizeof(Vtx));
+		ForceKeyFrame = false;
 	}
 };
 
@@ -287,11 +342,9 @@ bool RemoteGetInput(RemoteInput & input)
 // RemoteInit
 // - initialize RemoteImGui on top of your ImGui
 //------------------
-void RemoteInit(const char *bind_address, int port, float vwidth, float vheight)
+void RemoteInit(const char *local_address, int local_port)
 {
-	ImGui::GetStyle().WindowRounding = 0.f;
-	ImGui::GetIO().DisplaySize = ImVec2(vwidth, vheight);
-	GServer.Init(bind_address, port);
+	GServer.Init(local_address, local_port);
 }
 
 
@@ -301,6 +354,7 @@ void RemoteInit(const char *bind_address, int port, float vwidth, float vheight)
 //------------------
 void RemoteUpdate()
 {
+	GServer.Frame++;
 	GServer.Update();
 }
 
@@ -311,8 +365,6 @@ void RemoteUpdate()
 //------------------
 void RemoteDraw(ImDrawList** const cmd_lists, int cmd_lists_count)
 {
-	GServer.Frame++;
-
 	if (GServer.ClientActive)
 	{
 		// Count
@@ -331,7 +383,7 @@ void RemoteDraw(ImDrawList** const cmd_lists, int cmd_lists_count)
 		if (sendframe++ >= 2) // every 2 frames, @TWEAK
 		{
 			sendframe = 0;
-			GServer.PrepareMessage(cmd_count, vtx_count);
+			GServer.PreparePacketFrame(cmd_count, vtx_count);
 			// Add all drawcmds
 			WebSocketServer::Cmd cmd;
 			for (int n = 0; n < cmd_lists_count; n++)
@@ -358,7 +410,7 @@ void RemoteDraw(ImDrawList** const cmd_lists, int cmd_lists_count)
 				}
 			}
 			// Send
-			GServer.SendMessage();
+			GServer.SendPacket();
 		}
 	}
 }

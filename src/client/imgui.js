@@ -25,15 +25,19 @@ function DataStream( data ) {
 
 // threejs shader to render with clipping region
 var ImVS = [
+    "attribute float alpha;",
+
     "varying vec3 vColor;",
     "varying vec2 vUv;",
     "varying vec4 vPos;",
+    "varying float vAlpha;",
 
     "void main() {",
 
         "vColor = color;",
         "vUv = uv;",
         "vPos = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
+        "vAlpha = alpha;",
         "gl_Position = vPos;",
 
     "}" ].join("\n");
@@ -42,13 +46,14 @@ var ImFS = [
     "varying vec3 vColor;",
     "varying vec2 vUv;",
     "varying vec4 vPos;",
+    "varying float vAlpha;",
 
     "uniform vec4 uClip;",
     "uniform sampler2D tTex;",
 
     "void main() {",
         "if( ( vPos.x >= uClip.x && vPos.y >= uClip.y && vPos.x < uClip.z && vPos.y < uClip.w ) || uClip.z == -9999.0 && uClip.w == -9999.0 )",
-            "gl_FragColor = texture2D( tTex, vUv ) * vec4( vColor, 1.0 );",
+            "gl_FragColor = vec4( vColor, texture2D( tTex, vUv ).a * vAlpha );",
         "else",
             "gl_FragColor = vec4( 0.0, 0.0, 0.0, 0.0 );",
     "}" ].join("\n");
@@ -58,7 +63,7 @@ var ImguiGui = function() {
   this.windows = [ 'Origin' ];
 };
 
-function StartImgui( element, serveruri, targetwidth, targetheight, targetfonttex, compressed, backgroundtex ) {
+function StartImgui( element, serveruri, targetwidth, targetheight, compressed ) {
 
     if( !Detector.webgl ) Detector.addGetWebGLMessage();
 
@@ -66,12 +71,13 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     var datgui = new ImguiGui();
     var datgui_window = gui.add( datgui, 'window', datgui.windows );
     datgui_window.onChange( onFocusWindow );
+    var websocket, connecting, connected;
+    var server;
 
     var width = window.innerWidth;
     var height = window.innerHeight;
     var targetwidth = targetwidth;
     var targetheight = targetheight;
-    var fonttex = THREE.ImageUtils.loadTexture( targetfonttex );
     var clientactive = false;
     var frame = 0;
     var mouse = { x: 0, y: 0, l: 0, r: 0, w: 0, update: false };
@@ -99,9 +105,9 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
 
     // plane
     var scene_background = new THREE.Scene();
-    var plane = new THREE.Mesh( new THREE.PlaneBufferGeometry( targetwidth, targetheight ), new THREE.MeshBasicMaterial( { side: THREE.DoubleSide, map: THREE.ImageUtils.loadTexture( backgroundtex ) }));
-    plane.position.x = 960;
-    plane.position.y = 540;
+    var plane = new THREE.Mesh( new THREE.PlaneBufferGeometry( targetwidth, targetheight ), new THREE.MeshBasicMaterial( { color: 0xCC9999, side: THREE.DoubleSide }));
+    plane.position.x = targetwidth/2;
+    plane.position.y = targetheight/2;
     scene_background.add( plane );
 
     // imgui dynamic geometry / meshes
@@ -111,18 +117,21 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
     geometry.addAttribute( 'uv',       new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 2 * 3 ), 2 ) );
     geometry.addAttribute( 'color',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
+    geometry.addAttribute( 'alpha',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 1     ), 1 ) );
     geometry.dynamic = true;
     geometry.offsets = [ { start: 0, index: 0, count: 0 } ];
 
     // material
-    var gattributes = {};
     var guniforms = {
-        tTex: { type: 't', value: fonttex },
+        tTex: { type: 't', value: null },
         uClip: { type: 'v4', value: new THREE.Vector4() },
     };
+    var gattributes = {
+        alpha: { type: 'f', value: null },
+    };
     var material = new THREE.ShaderMaterial( {
-        attributes: gattributes,
         uniforms: guniforms,        
+        attributes: gattributes,
         vertexShader: ImVS,
         fragmentShader: ImFS,
         vertexColors: THREE.VertexColors,
@@ -137,6 +146,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     var gpositions = geometry.attributes.position.array;
     var guvs = geometry.attributes.uv.array;
     var gcolors = geometry.attributes.color.array;
+    var galphas = geometry.attributes.alpha.array;
     var gcmdcount = 0;
     var gvtxcount = 0;
     var gclips = [];
@@ -155,83 +165,135 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     elem.addEventListener( 'mousedown', onMouseDown, false );
     elem.addEventListener( 'mouseup', onMouseUp, false );
     elem.addEventListener( 'mousewheel', onMouseWheel, false );
-    window.addEventListener( 'keypress', onKeyPress, false );
     window.addEventListener( 'keydown', onKeyDown, false );
     window.addEventListener( 'keyup', onKeyUp, false );
+    window.addEventListener( 'keypress', onKeyPress, false );
+    window.addEventListener( 'paste', onPaste, false );
+    window.addEventListener( 'resize', onWindowResize, false );
     document.oncontextmenu = document.body.oncontextmenu = function() { return false; }
 
-    window.addEventListener( 'resize', onWindowResize, false );
-    function onWindowResize(){
+    // connect websocket to server
+    websocketConnect( serveruri );
+
+    // initial render
+    onRender();    
+
+    // keep connected
+    setInterval(function() { if ( !connecting && !connected ) websocketConnect( serveruri ); }, 5000);
+
+    // init websockets
+    function websocketConnect( serveruri ) {
+        console.log( "Remote ImGui: Connecting to " + serveruri + "..." );
+        connecting = true;
+        connected = false;
+        websocket = new WebSocket( serveruri );
+        websocket.binaryType = "arraybuffer";
+        websocket.onopen = function( evt ) {
+            console.log( "Remote ImGui: Connected" );
+            clientactive = false;
+            connecting = false;
+            connected = true;
+            websocket.send("ImInit")
+            gclips.length = 0;
+            onRender();
+        };
+        websocket.onclose = function( evt ) {
+            console.log( "Remote ImGui: Disconnected" );
+            clientactive = false;
+            connecting = false;
+            connected = false;
+            gclips.length = 0;
+            onRender();
+        };
+        websocket.onmessage = function( evt ) {
+            if( typeof evt.data == "string" ) {
+                if( evt.data == "ImInit" )
+                {
+                    console.log( "ImInit OK" );
+                    clientactive = true;
+                }
+                else
+                    console.log( "Unknown message: " + evt.data ); 
+            }
+            else {
+                var data;
+                if( compressed ) {
+                    // log decompress time
+                    //var t = performance.now();
+                    data = lz4.decompress( new Uint8Array( evt.data ) ).buffer;
+                    //console.log("Decompress: " + (performance.now() - t));
+                }
+                else
+                    data = evt.data;
+
+                // message type
+                var type = { TEX_FONT : 255, FRAME_KEY : 254, FRAME_DIFF : 253 };
+                var stream = new DataStream( data );
+                var message_type = stream.readUint8();
+                switch( message_type ) {
+                    // load font texture
+                    case type.TEX_FONT:
+                        var w = stream.readUint32();
+                        var h = stream.readUint32();
+                        var src = new Uint8Array( data, 9 );
+                        // canvas
+                        var canvas = document.createElement( 'canvas' );
+                        canvas.id     = "CursorLayer";
+                        canvas.width  = w;
+                        canvas.height = h;
+                        var ctx = canvas.getContext( '2d' );
+                        var imageData = ctx.getImageData( 0, 0, w,h );
+                        var buf = new ArrayBuffer( imageData.data.length );
+                        var buf8 = new Uint8ClampedArray( buf );
+                        var data = new Uint32Array( buf );
+                        for( var i = 0; i < w*h; i++ )
+                            data[ i ] = ( src[ i ] << 24 ) | 0xFFFFFF;
+                        imageData.data.set( buf8 );
+                        ctx.putImageData( imageData, 0, 0 );
+                        // texture
+                        var map = new THREE.Texture( canvas );
+                        map.needsUpdate = true;
+                        map.minFilter = map.magFilter = THREE.NearestFilter;
+                        guniforms.tTex.value = map;
+                        break;
+                    // full frame data
+                    case type.FRAME_KEY:
+                        onMessage( stream );
+                        prev_data = data;
+                        break;                    
+                    // use previous frame to compose current frame
+                    case type.FRAME_DIFF:
+                        var buffer = new Uint8Array( data );
+                        var prev_buffer = new Uint8Array( prev_data );
+                        for( var i = 1; i < buffer.length; i++ ) {
+                            if( i < prev_buffer.length ) {
+                                buffer[ i ] = buffer[ i ] + prev_buffer[ i ];
+                            }
+                        }
+                        onMessage( stream );
+                        prev_data = data;
+                        break;
+                }
+
+            }
+        };
+        websocket.onerror = function( evt ) {
+            console.log( "ERROR: " + evt.data );
+            clientactive = false;
+            connecting = false;
+            connected = false;
+            gclips.length = 0;
+            onRender();
+        };
+    }
+
+    function onWindowResize() {
         width = window.innerWidth;
         height = window.innerHeight; 
         renderer.setSize( window.innerWidth, window.innerHeight );
         camera = new THREE.OrthographicCamera( 0, width, 0, height, -1, 1 );
         camera.position.z = 1;
-    }    
-
-    // init websockets
-    var websocket = new WebSocket( serveruri );
-    websocket.binaryType = "arraybuffer";
-    websocket.onopen = function( evt ) {
-        console.log( "Remote ImGui: Connected to " + serveruri );
-        websocket.send("ImInit")
-        gclips.length = 0;
-        onRender();
-    };
-    websocket.onclose = function( evt ) {
-        console.log( "Remote ImGui: Disconnected" );
-        clientactive = false;
-        gclips.length = 0;
-        onRender();
-    };
-    websocket.onmessage = function( evt ) {
-        if( typeof evt.data == "string" ) {
-            if( evt.data == "ImInit" )
-            {
-                console.log( "ImInit OK" );
-                clientactive = true;
-            }
-            else
-                console.log( "Unknown message: " + evt.data ); 
-        }
-        else {
-            var data;
-            if( compressed ) {
-                // log decompress time
-                //var t = performance.now();
-                data = lz4.decompress( new Uint8Array( evt.data ) ).buffer;
-                //console.log("Decompress: " + (performance.now() - t));
-            }
-            else
-                data = evt.data;
-
-            // IsKey frame? compose with previous data
-            var buffer = new Int8Array( data );
-            if( buffer[ 0 ] == 0 ) {
-                var prev_buffer = new Int8Array( prev_data );
-                for( var i = 1; i < buffer.length; i++ ) {
-                    if( i < prev_buffer.length ) {
-                        buffer[ i ] = buffer[ i ] + prev_buffer[ i ];
-                    }
-                }
-            }
-
-            // parse message
-            onMessage( new DataStream( data ) );
-
-            // save previous buffer
-            prev_data = data;
-        }
-    };
-    websocket.onerror = function( evt ) {
-        console.log( "ERROR: " + evt.data );
-        clientactive = false;
-        gclips.length = 0;
-        onRender();        
-    };
-
-    // initial render
-    onRender();
+    }
 
     function onMouseMove( event ) {
         if( !event ) event = window.event;
@@ -243,9 +305,10 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             camera_drag_pos.y = event.clientY;
         }
         else {
-            mouse.x = event.clientX + camera.position.x;
-            mouse.y = event.clientY + camera.position.y;
-            mouse.update = true;
+            var x = event.clientX + camera.position.x;
+            var y = event.clientY + camera.position.y;
+            if( clientactive )
+                websocket.send("ImMouseMove=" + x + "," + y);
         }
     }
 
@@ -260,9 +323,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             camera_drag_pos.y = event.clientY;
         }
         else {
-            mouse.l = mouse_left;
-            mouse.r = mouse_right;
-            mouse.update = true;
+            if( clientactive )
+                websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
         }
     }    
 
@@ -275,9 +337,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             camera_drag = false;
         }
         else {
-            mouse.l = mouse_left;
-            mouse.r = mouse_right;
-            mouse.update = true;
+            if (clientactive)
+                websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
         }
     }
 
@@ -285,36 +346,50 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         if( !event ) event = window.event;
         event.preventDefault();
         if( event.which == 1 ) mouse_wheel += event.wheelDelta;
-        mouse.w = mouse_wheel;
-        mouse.update = true;
+        if( clientactive )
+            websocket.send("ImMouseWheel=" + mouse_wheel);
     }            
 
     function onKeyDown( event ) {
         if( !event ) event = window.event;
-        event.preventDefault();
-        if( event.which != 0 ) {
-            websocket.send( "ImKeyDown=" + event.which );
+        // do not prevent paste
+        if( event.which == 86 && event.ctrlKey )
+            return;
+        // prevent special keys
+        if( event.which < 32 || ( event.which >= 112 && event.which <= 123 ) ) {
+            event.preventDefault();
+            if( clientactive )
+                websocket.send( "ImKeyDown=" + event.which + "," + ( event.shiftKey?1:0 ) + "," + ( event.ctrlKey?1:0 ) );
         }
     }
 
     function onKeyUp( event ) {
         if( !event ) event = window.event;
-        event.preventDefault();
         if( event.which != 0 ) {
-            websocket.send( "ImKeyUp=" + event.which );
+            if( clientactive )
+                websocket.send( "ImKeyUp=" + event.which );
         }
-    }    
+    }
 
     function onKeyPress( event ) {
         if( !event ) event = window.event;
+        if( clientactive ) {
+            websocket.send( "ImKeyPress=" + String.fromCharCode( event.charCode ) );
+        }
+    }
+
+    function onPaste( event ) {
+        if (!event) event = window.event;
         event.preventDefault();
-        if( event.which != 0 ) {
-            websocket.send( "ImKeyPress=" + event.which );
+        if (event.which != 0) {
+            if( clientactive ) {
+                websocket.send( "ImClipboard=" + event.clipboardData.getData('Text') );
+                websocket.send( "ImKeyDown=86,0,1" );
+            }
         }
     }
 
     function onMessage( data ) {
-        var key = data.readUint8();
         gcmdcount = data.readUint32();
         gvtxcount = data.readUint32();
         gclips.length = 0;
@@ -340,6 +415,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         geometry.attributes.position.needsUpdate = true;
         geometry.attributes.uv.needsUpdate = true;
         geometry.attributes.color.needsUpdate = true;
+        geometry.attributes.alpha.needsUpdate = true;
 
         // update render and dat.gui
         onRender();
@@ -350,6 +426,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         var vidx = idx*3;
         var uidx = idx*2;
         var cidx = idx*3;
+        var aidx = idx;
         gpositions[ vidx+0 ] = data.readInt16AsFloat32();
         gpositions[ vidx+1 ] = data.readInt16AsFloat32();
         gpositions[ vidx+2 ] = 0;
@@ -358,6 +435,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
         gcolors   [ cidx+0 ] = data.readUint8AsFloat32();
         gcolors   [ cidx+1 ] = data.readUint8AsFloat32();
         gcolors   [ cidx+2 ] = data.readUint8AsFloat32();
+        galphas   [ aidx   ] = data.readUint8AsFloat32();
     }    
 
     function onRender() {
@@ -394,25 +472,12 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
             renderer.setClearColor( 0 );
             renderer.clear( true, true, false );
         }
-
-        // send input events
-        requestAnimationFrame( onUpdateInput );
-    }
-
-    function onUpdateInput() {
-        requestAnimationFrame( onUpdateInput );
-        frame++;
-        if( mouse.update ) {
-            if (clientactive)
-                websocket.send( "ImMouse=" + mouse.x + "," + mouse.y + "," + mouse.l + "," + mouse.r + "," + mouse.w );
-            mouse.update = false;
-        }
     }
 
     function onUpdateGui() {
-        if ( datgui.windows.length != ( gcmdcount+1 ) ) {
+        if( datgui.windows.length != ( gcmdcount+1 ) ) {
             datgui.windows = [ 'Origin' ];
-            for( var i = 0; i < gcmdcount; i++ )
+            for ( var i = 0; i < gcmdcount; i++ )
                 datgui.windows[ i+1 ] = i+1;
             gui.remove( datgui_window );
             datgui_window = gui.add( datgui, 'window', datgui.windows );
@@ -421,7 +486,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, targetfontte
     }
 
     function onFocusWindow( value ) {
-        if ( value == 'Origin' ) {
+        if( value == 'Origin' ) {
             camera_offset.x = 0;
             camera_offset.y = 0;
         }

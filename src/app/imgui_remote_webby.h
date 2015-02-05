@@ -1,8 +1,9 @@
 //-----------------------------------------------------------------------------
-// Remote Imgui for https://github.com/ocornut/imgui
-// https://github.com/JordiRos/remoteimgui
-// Jordi Ros
-// - using Webby: https://github.com/deplinenoise/webby
+// Remote ImGui https://github.com/JordiRos/remoteimgui
+// Uses
+// ImGui https://github.com/ocornut/imgui 1.3
+// Webby https://github.com/deplinenoise/webby
+// LZ4   https://code.google.com/p/lz4/
 //-----------------------------------------------------------------------------
 
 #include "webby/webby.h"
@@ -49,7 +50,7 @@ struct IWebSocketServer
 	struct WebbyServerConfig ServerConfig;
 	struct WebbyConnection *Client;
 
-	int Init(const char *bind_address, int port)
+	int Init(const char *local_address, int local_port)
 	{
 		s_WebSocketServer = this;
 
@@ -63,8 +64,8 @@ struct IWebSocketServer
 #endif
 
 		memset(&ServerConfig, 0, sizeof ServerConfig);
-		ServerConfig.bind_address = bind_address;
-		ServerConfig.listening_port = port;
+		ServerConfig.bind_address = local_address;
+		ServerConfig.listening_port = local_port;
 		ServerConfig.flags = WEBBY_SERVER_WEBSOCKETS;
 		ServerConfig.connection_max = 1;
 		ServerConfig.request_buffer_size = 2048;
@@ -118,15 +119,18 @@ struct IWebSocketServer
 
 	int WsOnFrame(struct WebbyConnection *connection, const struct WebbyWsFrame *frame)
 	{
-		/*
 		printf("WebSocket frame incoming\n");
 		printf("  Frame OpCode: %d\n", frame->opcode);
 		printf("  Final frame?: %s\n", (frame->flags & WEBBY_WSF_FIN) ? "yes" : "no");
 		printf("  Masked?     : %s\n", (frame->flags & WEBBY_WSF_MASKED) ? "yes" : "no");
 		printf("  Data Length : %d\n", (int) frame->payload_length);
-		*/
-		std::vector<unsigned char> buffer(frame->payload_length);
+
+		std::vector<unsigned char> buffer(frame->payload_length+1);
 		WebbyRead(connection, &buffer[0], frame->payload_length);
+		buffer[frame->payload_length] = 0;
+
+		printf("  Data : %s\n", &buffer[0]);
+
 		OnMessage((OpCode)frame->opcode, &buffer[0], frame->payload_length);
 
 		return 0;

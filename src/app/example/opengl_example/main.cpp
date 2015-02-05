@@ -7,14 +7,9 @@
 #pragma clang diagnostic ignored "-Wunused-function"   // warning: unused function
 #endif
 
-#include "imgui.h"
+#include "../imgui.h"
+#include "../../imgui_remote.h"
 #include <stdio.h>
-
-// @RemoteImgui begin
-#include "../imgui_remote.h"
-#define VCANVAS_WIDTH  8192
-#define VCANVAS_HEIGHT 8192
-// @RemoteImgui end
 
 // Glfw/Glew
 #define GLEW_STATIC
@@ -30,9 +25,7 @@ static bool mousePressed[2] = { false, false };
 // - in your Render function, try translating your projection matrix by (0.5f,0.5f) or (0.375f,0.375f)
 static void ImImpl_RenderDrawLists(ImDrawList** const cmd_lists, int cmd_lists_count)
 {
-	// @RemoteImgui begin
 	ImGui::RemoteDraw(cmd_lists, cmd_lists_count);
-	// @RemoteImgui end
 
     if (cmd_lists_count == 0)
         return;
@@ -52,11 +45,8 @@ static void ImImpl_RenderDrawLists(ImDrawList** const cmd_lists, int cmd_lists_c
     glEnable(GL_TEXTURE_2D);
 
     // Setup orthographic projection matrix
-    int display_w, display_h;
-    glfwGetFramebufferSize(window, &display_w, &display_h);
-	const float width = (float)display_w;
-    const float height = (float)display_h;
-
+    const float width = ImGui::GetIO().DisplaySize.x;
+    const float height = ImGui::GetIO().DisplaySize.y;
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -210,11 +200,7 @@ void InitImGui()
 
     LoadFontsTexture();
 
-	// @RemoteImgui begin
-	ImGui::RemoteInit("127.0.0.1", 7002); // local host, local port
-	//ImGui::GetStyle().WindowRounding = 0.f; // no rounding uses less bandwidth
-	io.DisplaySize = ImVec2((float)VCANVAS_WIDTH, (float)VCANVAS_HEIGHT);
-	// @RemoteImgui end
+	ImGui::RemoteInit("127.0.0.1", 7002, 8192, 8192);
 }
 
 void UpdateImGui()
@@ -226,6 +212,7 @@ void UpdateImGui()
     int display_w, display_h;
     glfwGetWindowSize(window, &w, &h);
     glfwGetFramebufferSize(window, &display_w, &display_h);
+    io.DisplaySize = ImVec2((float)display_w, (float)display_h);                                   // Display size, in pixels. For clamping windows positions.
 
     // Setup time step
     static double time = 0.0f;
@@ -233,8 +220,8 @@ void UpdateImGui()
     io.DeltaTime = (float)(current_time - time);
     time = current_time;
 
-	// @RemoteImgui begin
 	ImGui::RemoteUpdate();
+
 	ImGui::RemoteInput input;
 	if (ImGui::RemoteGetInput(input))
 	{
@@ -249,7 +236,6 @@ void UpdateImGui()
 		io.MouseWheel = (float)input.MouseWheel;
 	}
 	else
-	// @RemoteImgui end
 	{
 		// Setup inputs
 		// (we already got mouse wheel, keyboard keys & characters from glfw callbacks polled in glfwPollEvents())
@@ -320,11 +306,8 @@ int main(int argc, char** argv)
             ImGui::ShowTestWindow(&show_test_window);
         }
 
-	    int display_w, display_h;
-		glfwGetFramebufferSize(window, &display_w, &display_h);
-
-		// Rendering
-        glViewport(0, 0, display_w, display_h);
+        // Rendering
+        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
         glClearColor(clear_col.x, clear_col.y, clear_col.z, clear_col.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui::Render();
