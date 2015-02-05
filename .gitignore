@@ -10,3 +10,4 @@ src/client/node.exe
 src/client/node.exe - Shortcut.lnk
 src/app/example/Debug/opengl_example.exe
 src/app/example/Debug/opengl_example.ilk
+*.opensdf
