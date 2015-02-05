@@ -26,7 +26,7 @@ Tried to make usage simple, but might need a bit of work depending on your platf
  
 Have a look at app/example on how to use it. RemoteInput might conflict with your actual app input, so you will have to decide which one is focused and decide what input send to ImGui.
 
-*Dependencies*
+**Dependencies**
 
 LZ4 - https://code.google.com/p/lz4/
 
@@ -50,7 +50,7 @@ Width/Height - target device resolution
 
 Compressed - compression flag (set to true for now! host app always compresses atm)
 
-*Install*
+**Install**
 
 I've included a simple NodeJS server that will create a remote ImGui connection in a simple, fullscreen app.
 
@@ -62,7 +62,7 @@ I've included some default options, edit **server.js** and **imgui.html** to con
 
 You can also open a simple HTML and hardcode your host/port settings.
 
-*Dependencies*
+**Dependencies**
 
 ThreeJS - *https://github.com/mrdoob/three.js*
 
