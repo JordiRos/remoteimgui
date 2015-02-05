@@ -105,12 +105,13 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
 
     // plane
     var scene_background = new THREE.Scene();
-    var plane = new THREE.Mesh( new THREE.PlaneBufferGeometry( targetwidth, targetheight ), new THREE.MeshBasicMaterial( { color: 0xCC9999, side: THREE.DoubleSide }));
+    var plane = new THREE.Mesh( new THREE.PlaneBufferGeometry( targetwidth, targetheight ), new THREE.MeshBasicMaterial( { color: 0x72909A, side: THREE.DoubleSide }));
     plane.position.x = targetwidth/2;
     plane.position.y = targetheight/2;
     scene_background.add( plane );
 
     // imgui dynamic geometry / meshes
+    // FIXME: Support for any number of triangles.
     var MAX_TRIANGLES = 10000;
     var geometry = new THREE.BufferGeometry();
     geometry.addAttribute( 'index',    new THREE.BufferAttribute( new Uint32Array ( MAX_TRIANGLES * 1 * 3 ), 1 ) );
@@ -447,7 +448,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         camera.position.y = camera_offset.y;
 
         if (clientactive) {
-            renderer.setClearColor( 0x303030 );
+            renderer.setClearColor( 0x72909A );
             renderer.clear( true, true, false );
 
             // render background (visual reference of device canvas)
@@ -469,7 +470,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             }
         }
         else {
-            renderer.setClearColor( 0 );
+            // darken background
+            renderer.setClearColor( 0x546A71 );
             renderer.clear( true, true, false );
         }
     }
