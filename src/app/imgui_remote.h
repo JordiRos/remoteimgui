@@ -191,15 +191,15 @@ struct WebSocketServer : public IWebSocketServer
 #pragma pack(1)
 	struct Cmd
 	{
-		int   vtx_count;
+		int   elemCount;
 		float clip_rect[4];
 		void Set(const ImDrawCmd &draw_cmd)
 		{
-			vtx_count = draw_cmd.vtx_count;
-			clip_rect[0] = draw_cmd.clip_rect.x;
-			clip_rect[1] = draw_cmd.clip_rect.y;
-			clip_rect[2] = draw_cmd.clip_rect.z;
-			clip_rect[3] = draw_cmd.clip_rect.w;
+			elemCount = draw_cmd.ElemCount;
+			clip_rect[0] = draw_cmd.ClipRect.x;
+			clip_rect[1] = draw_cmd.ClipRect.y;
+			clip_rect[2] = draw_cmd.ClipRect.z;
+			clip_rect[3] = draw_cmd.ClipRect.w;
 			//printf("DrawCmd: %d ( %.2f, %.2f, %.2f, %.2f )\n", vtx_count, clip_rect[0], clip_rect[1], clip_rect[2], clip_rect[3]);
 		}
 	};
@@ -218,6 +218,15 @@ struct WebSocketServer : public IWebSocketServer
 			g = (vtx.col>>8 ) & 0xff;
 			b = (vtx.col>>16) & 0xff;
 			a = (vtx.col>>24) & 0xff;
+		}
+	};
+	struct Idx
+	{
+		unsigned short idx;
+
+		void Set(ImDrawIdx _idx)
+		{
+			idx = _idx;
 		}
 	};
 #pragma pack()
@@ -244,6 +253,15 @@ struct WebSocketServer : public IWebSocketServer
 		else
 			WriteDiff((void *)&vtx, sizeof(Vtx));
 	}
+
+	void Write(Idx const &idx)
+	{
+		if (IsKeyFrame)
+			Write((void *)&idx, sizeof(Idx));
+		else
+			WriteDiff((void *)&idx, sizeof(Idx));
+	}
+
 	void Write(const void *data, int size)
 	{
 		unsigned char *src = (unsigned char *)data;
@@ -302,12 +320,10 @@ struct WebSocketServer : public IWebSocketServer
 		ForceKeyFrame = true;
 	}
 
-	void PreparePacketFrame(unsigned int cmd_count, unsigned int vtx_count)
+	void PreparePacketFrame(unsigned int size)//unsigned int cmd_count, unsigned int vtx_count, unsigned int idx_count)
 	{
 		IsKeyFrame = (Frame%IMGUI_REMOTE_KEY_FRAME) == 0 || ForceKeyFrame;
-		PreparePacket(IsKeyFrame?FRAME_KEY:FRAME_DIFF, 2*sizeof(unsigned int) + cmd_count*sizeof(Cmd) + vtx_count*sizeof(Vtx));
-		Write(cmd_count);
-		Write(vtx_count);
+		PreparePacket(IsKeyFrame ? FRAME_KEY : FRAME_DIFF, size);		
 		//printf("ImWebSocket PreparePacket: cmd_count = %i, vtx_count = %i ( %lu bytes )\n", cmd_count, vtx_count, sizeof(unsigned int) + sizeof(unsigned int) + cmd_count * sizeof(Cmd) + vtx_count * sizeof(Vtx));
 		ForceKeyFrame = false;
 	}
@@ -367,51 +383,71 @@ void RemoteDraw(ImDrawList** const cmd_lists, int cmd_lists_count)
 {
 	if (GServer.ClientActive)
 	{
-		// Count
-		int cmd_count = 0;
-		int vtx_count = 0;
-		for (int n = 0; n < cmd_lists_count; n++)
+		static int sendframe = 0;
+		if (sendframe++ < 2) // every 2 frames, @TWEAK
 		{
-			const ImDrawList * cmd_list = cmd_lists[n];
-			const ImDrawVert * vtx_src = cmd_list->vtx_buffer.begin();
-			cmd_count += cmd_list->commands.size();
-			vtx_count += cmd_list->vtx_buffer.size();
+			return;
+		}
+		sendframe = 0;
+
+		unsigned int totalSize = sizeof(unsigned int); // cmd_lists_count
+		for(int n = 0; n < cmd_lists_count; n++)
+		{ 
+			const ImDrawList* cmd_list = cmd_lists[n];
+			const ImDrawVert * vtx_src = cmd_list->VtxBuffer.begin();
+			const ImDrawIdx * idx_src = cmd_list->IdxBuffer.begin();
+			int cmd_count = cmd_list->CmdBuffer.size();
+			int vtx_count = cmd_list->VtxBuffer.size();
+			int idx_count = cmd_list->IdxBuffer.size();
+			totalSize += 3 * sizeof(unsigned int); //cmd_count, vtx_count and idx_count
+			totalSize += cmd_count*sizeof(WebSocketServer::Cmd) + vtx_count*sizeof(WebSocketServer::Vtx) + idx_count*sizeof(WebSocketServer::Idx);
 		}
 
-		// Send 
-		static int sendframe = 0;
-		if (sendframe++ >= 2) // every 2 frames, @TWEAK
+		GServer.PreparePacketFrame(totalSize);
+		GServer.Write((unsigned int)cmd_lists_count);
+
+		for (int n = 0; n < cmd_lists_count; n++)
 		{
-			sendframe = 0;
-			GServer.PreparePacketFrame(cmd_count, vtx_count);
+			const ImDrawList* cmd_list = cmd_lists[n];
+			const ImDrawVert * vtx_src = cmd_list->VtxBuffer.begin();
+			const ImDrawIdx * idx_src = cmd_list->IdxBuffer.begin();
+			unsigned int cmd_count = cmd_list->CmdBuffer.size();
+			unsigned int vtx_count = cmd_list->VtxBuffer.size();
+			unsigned int idx_count = cmd_list->IdxBuffer.size();
+			GServer.Write(cmd_count);
+			GServer.Write(vtx_count);
+			GServer.Write(idx_count);
+			// Send 
 			// Add all drawcmds
 			WebSocketServer::Cmd cmd;
-			for (int n = 0; n < cmd_lists_count; n++)
+			const ImDrawCmd* pcmd_end = cmd_list->CmdBuffer.end();
+			for (const ImDrawCmd* pcmd = cmd_list->CmdBuffer.begin(); pcmd != pcmd_end; pcmd++)
 			{
-				const ImDrawList* cmd_list = cmd_lists[n];
-				const ImDrawCmd* pcmd_end = cmd_list->commands.end();
-				for (const ImDrawCmd* pcmd = cmd_list->commands.begin(); pcmd != pcmd_end; pcmd++)
-				{
-					cmd.Set(*pcmd);
-					GServer.Write(cmd);
-				}
+				cmd.Set(*pcmd);
+				GServer.Write(cmd);
 			}
 			// Add all vtx
 			WebSocketServer::Vtx vtx;
-			for (int n = 0; n < cmd_lists_count; n++)
+			int vtx_remaining = vtx_count;
+			while (vtx_remaining-- > 0)
 			{
-				const ImDrawList* cmd_list = cmd_lists[n];
-				const ImDrawVert* vtx_src = cmd_list->vtx_buffer.begin();
-				int vtx_remaining = cmd_list->vtx_buffer.size();
-				while (vtx_remaining-- > 0)
-				{
-					vtx.Set(*vtx_src++);
-					GServer.Write(vtx);
-				}
+				vtx.Set(*vtx_src++);
+				GServer.Write(vtx);
 			}
-			// Send
-			GServer.SendPacket();
+
+			// Add all idx
+			WebSocketServer::Idx idx;
+
+			int idx_remaining = idx_count;
+			while (idx_remaining-- > 0)
+			{
+				idx.Set(*idx_src++);
+				GServer.Write(idx);
+			}
+
 		}
+		// Send
+		GServer.SendPacket();		
 	}
 }
 

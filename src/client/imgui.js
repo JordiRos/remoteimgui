@@ -81,7 +81,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     var clientactive = false;
     var frame = 0;
     var mouse = { x: 0, y: 0, l: 0, r: 0, w: 0, update: false };
-    var cur_vtx;
+    var curElem;
     var prev_data;
 
     var camera_offset = { x: 0, y: 0 };
@@ -96,8 +96,6 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     renderer.autoClear = false;
     renderer.setSize( width, height );
 
-    // scene
-    var scene = new THREE.Scene();
 
     // camera
     var camera = new THREE.OrthographicCamera( 0, width, 0, height, -1, 1 );
@@ -112,16 +110,6 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
 
     // imgui dynamic geometry / meshes
     // FIXME: Support for any number of triangles.
-    var MAX_TRIANGLES = 10000;
-    var geometry = new THREE.BufferGeometry();
-    geometry.addAttribute( 'index',    new THREE.BufferAttribute( new Uint32Array ( MAX_TRIANGLES * 1 * 3 ), 1 ) );
-    geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
-    geometry.addAttribute( 'uv',       new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 2 * 3 ), 2 ) );
-    geometry.addAttribute( 'color',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
-    geometry.addAttribute( 'alpha',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 1     ), 1 ) );
-    geometry.dynamic = true;
-    geometry.offsets = [ { start: 0, index: 0, count: 0 } ];
-
     // material
     var guniforms = {
         tTex: { type: 't', value: null },
@@ -138,24 +126,45 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         vertexColors: THREE.VertexColors,
         transparent: true,
         side: THREE.DoubleSide } );
-    var mesh = new THREE.Mesh( geometry, material );
-    mesh.frustumCulled = false;
-    scene.add( mesh );
 
+    var MAX_DRAW_LISTS= 20;
+    var geometries = [];
+    var scenes = [];
+    var scene;
+    var geometry;
+    for(var i = 0; i < MAX_DRAW_LISTS; i++)
+    {
+        // scene
+        scene = new THREE.Scene();
+        scenes.push(scene);
+        geometry = new THREE.BufferGeometry();
+        var MAX_TRIANGLES = 65536 / 3;
+        geometry.addAttribute( 'index',    new THREE.BufferAttribute( new Uint16Array ( MAX_TRIANGLES * 3 ), 1 ) );
+        geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
+        geometry.addAttribute( 'uv',       new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 2 * 3 ), 2 ) );
+        geometry.addAttribute( 'color',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
+        geometry.addAttribute( 'alpha',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 1     ), 1 ) );
+        geometry.dynamic = true;
+        geometry.offsets = [ { start: 0, index: 0, count: 0 } ];
+        geometries.push(geometry);
+
+        var mesh = new THREE.Mesh( geometry, material );
+        mesh.frustumCulled = false;
+        scene.add( mesh );
+    }
+    geometry = null;
+    scene = null;
     // geometry shortcuts
-    var gindices = geometry.attributes.index.array;
-    var gpositions = geometry.attributes.position.array;
-    var guvs = geometry.attributes.uv.array;
-    var gcolors = geometry.attributes.color.array;
-    var galphas = geometry.attributes.alpha.array;
+    var gindices;
+    var gpositions;
+    var guvs;
+    var gcolors;
+    var galphas;
     var gcmdcount = 0;
     var gvtxcount = 0;
+    var gidxcount = 0;
+    var glistcount= 0;
     var gclips = [];
-
-    // fill indices (fixed for the whole geometry)
-    for( var i = 0; i < MAX_TRIANGLES*3; i++ )
-        gindices[i] = i;
-    geometry.attributes.index.needsUpdate = true;
 
     // add to element
     element.appendChild( renderer.domElement )
@@ -391,35 +400,51 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     }
 
     function onMessage( data ) {
-        gcmdcount = data.readUint32();
-        gvtxcount = data.readUint32();
-        gclips.length = 0;
-        cur_vtx = 0;
-        // command lists
-        for( var i = 0; i < gcmdcount; i++ ) {
-            var num = data.readUint32();
-            var x = data.readFloat32();
-            var y = data.readFloat32();
-            var w = data.readFloat32();
-            var h = data.readFloat32();
-            var clip_x = x * 2 / width - 1;
-            var clip_y = y * 2 / height - 1;
-            var clip_w = w * 2 / width - 1;
-            var clip_h = h * 2 / height - 1;
-            gclips.push( { start: cur_vtx, index: 0, count: num, clip: new THREE.Vector4( clip_x, clip_y, clip_w, clip_h ) } );
-            cur_vtx+= num;
+        if(!onRenderBackground())
+            return;
+        glistcount= data.readUint32();
+        for(var l = 0 ; l < glistcount; l++)
+        {
+            geometry = geometries[l];
+            gcmdcount = data.readUint32();
+            gvtxcount = data.readUint32();
+            gidxcount = data.readUint32();
+            gindices = geometry.attributes.index.array;
+            gpositions = geometry.attributes.position.array;
+            guvs = geometry.attributes.uv.array;
+            gcolors = geometry.attributes.color.array;
+            galphas = geometry.attributes.alpha.array;
+            gclips.length = 0;
+            curElem = 0;
+            // command lists
+            for( var i = 0; i < gcmdcount; i++ ) {
+                var num = data.readUint32();
+                var x = data.readFloat32();
+                var y = data.readFloat32();
+                var w = data.readFloat32();
+                var h = data.readFloat32();
+                var clip_x = x * 2 / width - 1;
+                var clip_y = y * 2 / height - 1;
+                var clip_w = w * 2 / width - 1;
+                var clip_h = h * 2 / height - 1;
+                gclips.push( { start: curElem, index: 0, count: num, clip: new THREE.Vector4( clip_x, clip_y, clip_w, clip_h ) } );
+                curElem+= num;
+            }
+            // all vertices
+            for( var i = 0; i < gvtxcount; i++ ) {
+                addVtx( data, i )
+            }
+            for( var i = 0; i < gidxcount; i++ ) {
+                addIdx( data, i )
+            }
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.uv.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+            geometry.attributes.alpha.needsUpdate = true;
+            geometry.attributes.index.needsUpdate = true;
+            // update render and dat.gui
+            onRenderTriangles(scenes[l]);
         }
-        // all vertices
-        for( var i = 0; i < gvtxcount; i++ ) {
-            addVtx( data, i )
-        }
-        geometry.attributes.position.needsUpdate = true;
-        geometry.attributes.uv.needsUpdate = true;
-        geometry.attributes.color.needsUpdate = true;
-        geometry.attributes.alpha.needsUpdate = true;
-
-        // update render and dat.gui
-        onRender();
         onUpdateGui();
     }
 
@@ -439,40 +464,55 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         galphas   [ aidx   ] = data.readUint8AsFloat32();
     }    
 
+    function addIdx(data, idx)
+    {
+        gindices [ idx ] = data.readUint16();         
+    }
+
     function onRender() {
 
         // Use this to only render selected window
         //var idx = ( datgui.window == 'All' ) ? -1 : parseInt( datgui.window ) - 1;
+        if(onRenderBackground())
+        {
+            //onRenderTriangles();            
+        }
+    }
 
-        camera.position.x = camera_offset.x;
-        camera.position.y = camera_offset.y;
-
+    function onRenderBackground()
+    {
         if (clientactive) {
             renderer.setClearColor( 0x72909A );
             renderer.clear( true, true, false );
 
             // render background (visual reference of device canvas)
             renderer.render( scene_background, camera );
-
-            // render command lists (or selected one)
-            for( var i = 0; i < gclips.length; i++ ) {
-                //if ( idx == -1 || idx == i ) {
-                {
-                    geometry.offsets[ 0 ].start = gclips[ i ].start;
-                    geometry.offsets[ 0 ].index = gclips[ i ].index;
-                    geometry.offsets[ 0 ].count = gclips[ i ].count;
-                    guniforms.uClip.value.x = gclips[ i ].clip.x - (camera.position.x*2) / width;
-                    guniforms.uClip.value.y = - ( gclips[ i ].clip.w - (camera.position.y*2) / height );
-                    guniforms.uClip.value.z = ( i == 0 ) ? -9999 : gclips[ i ].clip.z - (camera.position.x*2) / width;
-                    guniforms.uClip.value.w = ( i == 0 ) ? -9999 : - ( gclips[ i ].clip.y - (camera.position.y*2) / height );
-                    renderer.render( scene, camera );
-                }
-            }
+            return true;
+          
         }
         else {
             // darken background
             renderer.setClearColor( 0x546A71 );
             renderer.clear( true, true, false );
+            return false;
+        }
+    }
+
+    function onRenderTriangles(scene)
+    {
+        camera.position.x = camera_offset.x;
+        camera.position.y = camera_offset.y;
+        // render command lists (or selected one)
+        for( var i = 0; i < gclips.length; i++ ) 
+        {
+            geometry.offsets[ 0 ].start = gclips[ i ].start;
+            geometry.offsets[ 0 ].index = gclips[ i ].index;
+            geometry.offsets[ 0 ].count = gclips[ i ].count;
+            guniforms.uClip.value.x = gclips[ i ].clip.x - (camera.position.x*2) / width;
+            guniforms.uClip.value.y = - ( gclips[ i ].clip.w - (camera.position.y*2) / height );
+            guniforms.uClip.value.z = ( i == 0 ) ? -9999 : gclips[ i ].clip.z - (camera.position.x*2) / width;
+            guniforms.uClip.value.w = ( i == 0 ) ? -9999 : - ( gclips[ i ].clip.y - (camera.position.y*2) / height );
+            renderer.render( scene, camera );
         }
     }
 

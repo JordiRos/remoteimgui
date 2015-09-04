@@ -7,6 +7,19 @@
 #pragma clang diagnostic ignored "-Wunused-function"   // warning: unused function
 #endif
 
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+
+#ifdef __APPLE__
+#include <unistd.h>
+#endif
 #include "imgui.h"
 #include <stdio.h>
 
@@ -17,8 +30,6 @@
 // @RemoteImgui end
 
 // Glfw/Glew
-#define GLEW_STATIC
-#include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
 
@@ -28,13 +39,13 @@ static bool mousePressed[2] = { false, false };
 // This is the main rendering function that you have to implement and provide to ImGui (via setting up 'RenderDrawListsFn' in the ImGuiIO structure)
 // If text or lines are blurry when integrating ImGui in your engine:
 // - in your Render function, try translating your projection matrix by (0.5f,0.5f) or (0.375f,0.375f)
-static void ImImpl_RenderDrawLists(ImDrawList** const cmd_lists, int cmd_lists_count)
+static void ImImpl_RenderDrawLists(ImDrawData* draw_data)
 {
 	// @RemoteImgui begin
-	ImGui::RemoteDraw(cmd_lists, cmd_lists_count);
+	ImGui::RemoteDraw(draw_data->CmdLists, draw_data->CmdListsCount);
 	// @RemoteImgui end
 
-    if (cmd_lists_count == 0)
+    if (draw_data->CmdListsCount == 0)
         return;
 
     // We are using the OpenGL fixed pipeline to make the example code simpler to read!
@@ -64,26 +75,33 @@ static void ImImpl_RenderDrawLists(ImDrawList** const cmd_lists, int cmd_lists_c
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
-
     // Render command lists
-    for (int n = 0; n < cmd_lists_count; n++)
-    {
-        const ImDrawList* cmd_list = cmd_lists[n];
-        const unsigned char* vtx_buffer = (const unsigned char*)&cmd_list->vtx_buffer.front();
-        glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert), (void*)(vtx_buffer + OFFSETOF(ImDrawVert, pos)));
-        glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert), (void*)(vtx_buffer + OFFSETOF(ImDrawVert, uv)));
-        glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(ImDrawVert), (void*)(vtx_buffer + OFFSETOF(ImDrawVert, col)));
 
-        int vtx_offset = 0;
-        for (size_t cmd_i = 0; cmd_i < cmd_list->commands.size(); cmd_i++)
-        {
-            const ImDrawCmd* pcmd = &cmd_list->commands[cmd_i];
-            glBindTexture(GL_TEXTURE_2D, (GLuint)(intptr_t)pcmd->texture_id);
-            glScissor((int)pcmd->clip_rect.x, (int)(height - pcmd->clip_rect.w), (int)(pcmd->clip_rect.z - pcmd->clip_rect.x), (int)(pcmd->clip_rect.w - pcmd->clip_rect.y));
-            glDrawArrays(GL_TRIANGLES, vtx_offset, pcmd->vtx_count);
-            vtx_offset += pcmd->vtx_count;
-        }
-    }
+	for (int n = 0; n < draw_data->CmdListsCount; n++)
+	{
+		const ImDrawList* cmd_list = draw_data->CmdLists[n];
+		const unsigned char* vtx_buffer = (const unsigned char*)&cmd_list->VtxBuffer.front();
+		const ImDrawIdx* idx_buffer = &cmd_list->IdxBuffer.front();
+		glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert), (void*)(vtx_buffer + OFFSETOF(ImDrawVert, pos)));
+		glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert), (void*)(vtx_buffer + OFFSETOF(ImDrawVert, uv)));
+		glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(ImDrawVert), (void*)(vtx_buffer + OFFSETOF(ImDrawVert, col)));
+
+		for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.size(); cmd_i++)
+		{
+			const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+			if (pcmd->UserCallback)
+			{
+				pcmd->UserCallback(cmd_list, pcmd);
+			}
+			else
+			{
+				glBindTexture(GL_TEXTURE_2D, (GLuint)(intptr_t)pcmd->TextureId);
+				glScissor((int)pcmd->ClipRect.x, (int)(height - pcmd->ClipRect.w), (int)(pcmd->ClipRect.z - pcmd->ClipRect.x), (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
+				glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, GL_UNSIGNED_SHORT, idx_buffer);
+			}
+			idx_buffer += pcmd->ElemCount;
+		}
+	}
 
     // Restore modified state
     glDisableClientState(GL_COLOR_ARRAY);
@@ -155,7 +173,6 @@ void InitGL()
     glfwSetScrollCallback(window, glfw_scroll_callback);
     glfwSetCharCallback(window, glfw_char_callback);
 
-    glewInit();
 }
 
 void LoadFontsTexture()
@@ -316,7 +333,7 @@ int main(int argc, char** argv)
         // 3. Show the ImGui test window. Most of the sample code is in ImGui::ShowTestWindow()
         if (show_test_window)
         {
-            ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiSetCondition_FirstUseEver);
+            ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiSetCond_FirstUseEver);
             ImGui::ShowTestWindow(&show_test_window);
         }
 
