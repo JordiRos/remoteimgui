@@ -1,4 +1,5 @@
-
+#define _CRT_SECURE_NO_WARNINGS 1
+#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #include "webby.h"
 
 /* Copyright (c) 2012, Andreas Fredriksson < dep at defmacro dot se > */

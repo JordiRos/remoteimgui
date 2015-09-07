@@ -10,3 +10,5 @@
 *.ilk
 *.ini
 *.opensdf
+*xcuserdata*
+*.xccheckout

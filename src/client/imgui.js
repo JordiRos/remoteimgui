@@ -45,17 +45,12 @@ var ImVS = [
 var ImFS = [
     "varying vec3 vColor;",
     "varying vec2 vUv;",
-    "varying vec4 vPos;",
     "varying float vAlpha;",
-
-    "uniform vec4 uClip;",
+    
     "uniform sampler2D tTex;",
 
     "void main() {",
-        "if( ( vPos.x >= uClip.x && vPos.y >= uClip.y && vPos.x < uClip.z && vPos.y < uClip.w ) || uClip.z == -9999.0 && uClip.w == -9999.0 )",
             "gl_FragColor = vec4( vColor, texture2D( tTex, vUv ).a * vAlpha );",
-        "else",
-            "gl_FragColor = vec4( 0.0, 0.0, 0.0, 0.0 );",
     "}" ].join("\n");
 
 var ImguiGui = function() {
@@ -138,7 +133,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         scene = new THREE.Scene();
         scenes.push(scene);
         geometry = new THREE.BufferGeometry();
-        var MAX_TRIANGLES = 65536 / 3;
+        var MAX_TRIANGLES = 21844; // *3 ~= 65536
         geometry.addAttribute( 'index',    new THREE.BufferAttribute( new Uint16Array ( MAX_TRIANGLES * 3 ), 1 ) );
         geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
         geometry.addAttribute( 'uv',       new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 2 * 3 ), 2 ) );
@@ -318,7 +313,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             var x = event.clientX + camera.position.x;
             var y = event.clientY + camera.position.y;
             if( clientactive )
-                websocket.send("ImMouseMove=" + x + "," + y);
+                websocket.send("ImMouseMove=" + x + "," + y + "," + mouse_left + "," + mouse_right);
         }
     }
 
@@ -334,7 +329,10 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         }
         else {
             if( clientactive )
+            {
+                console.log("ImMousePress=" + mouse_left + "," + mouse_right);
                 websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
+            }
         }
     }    
 
@@ -348,16 +346,19 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         }
         else {
             if (clientactive)
+            {
+                console.log("ImMousePress=" + mouse_left + "," + mouse_right);
                 websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
+            }
         }
     }
 
     function onMouseWheel( event ) {
         if( !event ) event = window.event;
         event.preventDefault();
-        if( event.which == 1 ) mouse_wheel += event.wheelDelta;
-        if( clientactive )
-            websocket.send("ImMouseWheel=" + mouse_wheel);
+        //if( event.which == 1 ) mouse_wheel += event.wheelDelta;
+        if( event.which == 1 && clientactive )
+            websocket.send("ImMouseWheelDelta=" + event.wheelDelta);
     }            
 
     function onKeyDown( event ) {
@@ -423,11 +424,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
                 var y = data.readFloat32();
                 var w = data.readFloat32();
                 var h = data.readFloat32();
-                var clip_x = x * 2 / width - 1;
-                var clip_y = y * 2 / height - 1;
-                var clip_w = w * 2 / width - 1;
-                var clip_h = h * 2 / height - 1;
-                gclips.push( { start: curElem, index: 0, count: num, clip: new THREE.Vector4( clip_x, clip_y, clip_w, clip_h ) } );
+                gclips.push( { start: curElem, index: 0, count: num, clip: new THREE.Vector4( x, y, w, h ) } );
                 curElem+= num;
             }
             // all vertices
@@ -484,7 +481,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         if (clientactive) {
             renderer.setClearColor( 0x72909A );
             renderer.clear( true, true, false );
-
+            renderer.enableScissorTest(false);
             // render background (visual reference of device canvas)
             renderer.render( scene_background, camera );
             return true;
@@ -502,16 +499,21 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     {
         camera.position.x = camera_offset.x;
         camera.position.y = camera_offset.y;
+        renderer.enableScissorTest(true);
         // render command lists (or selected one)
-        for( var i = 0; i < gclips.length; i++ ) 
+        for( var i = 0; i < gclips.length; i++ )
         {
             geometry.offsets[ 0 ].start = gclips[ i ].start;
             geometry.offsets[ 0 ].index = gclips[ i ].index;
             geometry.offsets[ 0 ].count = gclips[ i ].count;
-            guniforms.uClip.value.x = gclips[ i ].clip.x - (camera.position.x*2) / width;
-            guniforms.uClip.value.y = - ( gclips[ i ].clip.w - (camera.position.y*2) / height );
-            guniforms.uClip.value.z = ( i == 0 ) ? -9999 : gclips[ i ].clip.z - (camera.position.x*2) / width;
-            guniforms.uClip.value.w = ( i == 0 ) ? -9999 : - ( gclips[ i ].clip.y - (camera.position.y*2) / height );
+
+            renderer.setScissor(gclips[ i ].clip.x,
+                                (height - gclips[ i ].clip.w) ,
+                                (gclips[ i ].clip.z - gclips[ i ].clip.x),
+                                (gclips[ i ].clip.w - gclips[ i ].clip.y)
+                           );
+            
+                                
             renderer.render( scene, camera );
         }
     }

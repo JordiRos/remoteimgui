@@ -20,7 +20,7 @@
 #ifdef __APPLE__
 #include <unistd.h>
 #endif
-#include "imgui.h"
+#include "../imgui/imgui.h"
 #include <stdio.h>
 
 // @RemoteImgui begin
@@ -263,7 +263,7 @@ void UpdateImGui()
 		io.MousePos = input.MousePos;
 		io.MouseDown[0] = (input.MouseButtons & 1);
 		io.MouseDown[1] = (input.MouseButtons & 2) != 0;
-		io.MouseWheel = (float)input.MouseWheel;
+		io.MouseWheel += input.MouseWheelDelta *0.01f;
 	}
 	else
 	// @RemoteImgui end

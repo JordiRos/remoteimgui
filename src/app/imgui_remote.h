@@ -11,7 +11,7 @@
 #include <vector>
 
 #define IMGUI_REMOTE_KEY_FRAME    60  // send keyframe every 30 frames
-#define IMGUI_REMOTE_INPUT_FRAMES 120 // input valid during 120 frames
+#define IMGUI_REMOTE_INPUT_FRAMES 60 // input valid during 120 frames
 
 namespace ImGui {
 
@@ -24,7 +24,7 @@ struct RemoteInput
 {
     ImVec2	MousePos;
     int		MouseButtons;
-    int		MouseWheel;
+    float	MouseWheelDelta;
     bool	KeyCtrl;
     bool	KeyShift;
     bool	KeysDown[256];
@@ -106,12 +106,13 @@ struct WebSocketServer : public IWebSocketServer
 				}
 				else if (strstr((char *)data, "ImMouseMove"))
 				{
-					int x, y;
-					if (sscanf_s((char *)data, "ImMouseMove=%d,%d", &x, &y) == 2)
+					int x, y,mouse_left,mouse_right;
+					if (sscanf((char *)data, "ImMouseMove=%d,%d,%d,%d", &x, &y,&mouse_left,&mouse_right) == 4)
 					{
 						FrameReceived = Frame;
 						Input.MousePos.x = (float)x;
 						Input.MousePos.y = (float)y;
+                        Input.MouseButtons = mouse_left | (mouse_right << 1);
 					}
 				}
 				else if (strstr((char *)data, "ImMousePress"))
@@ -123,13 +124,13 @@ struct WebSocketServer : public IWebSocketServer
 						Input.MouseButtons = l | (r<<1);
 					}
 				}
-				else if (strstr((char *)data, "ImMouseWheel"))
+				else if (strstr((char *)data, "ImMouseWheelDelta"))
 				{
-					int new_wheel;
-					if (sscanf((char *)data, "ImMouseWheel=%d", &new_wheel) == 1)
+					float mouseWheelDelta;
+					if (sscanf((char *)data, "ImMouseWheelDelta=%f", &mouseWheelDelta) == 1)
 					{
 						FrameReceived = Frame;
-						Input.MouseWheel = new_wheel;
+						Input.MouseWheelDelta = mouseWheelDelta;
 					}
 				}
 				else if (strstr((char *)data, "ImKeyDown"))
@@ -185,6 +186,9 @@ struct WebSocketServer : public IWebSocketServer
 			case WebSocketServer::Pong:
 				printf("ImGui client: PONG\n");
 				break;
+            default:
+            assert(0);
+            break;
 		}
 	}
 
@@ -267,7 +271,7 @@ struct WebSocketServer : public IWebSocketServer
 		unsigned char *src = (unsigned char *)data;
 		for (int i = 0; i < size; i++)
 		{
-			int pos = Packet.size();
+			int pos = (int)Packet.size();
 			Write(src[i]);
 			PrevPacket[pos] = src[i];
 		}
@@ -277,7 +281,7 @@ struct WebSocketServer : public IWebSocketServer
 		unsigned char *src = (unsigned char *)data;
 		for (int i = 0; i < size; i++)
 		{
-			int pos = Packet.size();
+			int pos = (int)Packet.size();
 			Write((unsigned char)(src[i] - (pos < PrevPacketSize ? PrevPacket[pos] : 0)));
 			PrevPacket[pos] = src[i];
 		}
@@ -286,7 +290,7 @@ struct WebSocketServer : public IWebSocketServer
 	void SendPacket()
 	{
 		static int buffer[65536];
-		int size = Packet.size();
+		int size = (int)Packet.size();
 		int csize = LZ4_compress_limitedOutput((char *)&Packet[0], (char *)(buffer+3), size, 65536*sizeof(int)-12);
 		buffer[0] = 0xBAADFEED; // Our LZ4 header magic number (used in custom lz4.js to decompress)
 		buffer[1] = size;
@@ -339,18 +343,21 @@ static WebSocketServer GServer;
 //------------------
 bool RemoteGetInput(RemoteInput & input)
 {
+    bool res = false;
 	if (GServer.ClientActive)
 	{
+        
 		if (GServer.Frame - GServer.FrameReceived < IMGUI_REMOTE_INPUT_FRAMES)
 		{
 			input = GServer.Input;
-			return true;
+            res = true;
 		}
-		memset(GServer.Input.KeysDown, 0, 256*sizeof(bool));
-		GServer.Input.KeyCtrl = false;
-		GServer.Input.KeyShift = false;
 	}
-	return false;
+    memset(GServer.Input.KeysDown, 0, 256*sizeof(bool));
+    GServer.Input.KeyCtrl = false;
+    GServer.Input.KeyShift = false;
+    GServer.Input.MouseWheelDelta = 0;
+	return res;
 }
 
 
@@ -394,8 +401,6 @@ void RemoteDraw(ImDrawList** const cmd_lists, int cmd_lists_count)
 		for(int n = 0; n < cmd_lists_count; n++)
 		{ 
 			const ImDrawList* cmd_list = cmd_lists[n];
-			const ImDrawVert * vtx_src = cmd_list->VtxBuffer.begin();
-			const ImDrawIdx * idx_src = cmd_list->IdxBuffer.begin();
 			int cmd_count = cmd_list->CmdBuffer.size();
 			int vtx_count = cmd_list->VtxBuffer.size();
 			int idx_count = cmd_list->IdxBuffer.size();
