@@ -81,7 +81,35 @@ struct WebSocketServer : public IWebSocketServer
 		IsKeyFrame = false;
 		PrevPacketSize = 0;
 	}
-	
+	inline bool mapRemoteKey(int* remoteKey, bool isCtrlPressed)
+    {
+        if(*remoteKey == 37)
+            *remoteKey = ImGuiKey_LeftArrow;
+        else if(*remoteKey == 40)
+            *remoteKey = ImGuiKey_DownArrow;
+        else if(*remoteKey == 38)
+            *remoteKey = ImGuiKey_UpArrow;
+        else if(*remoteKey == 39)
+            *remoteKey = ImGuiKey_RightArrow;
+        else if(*remoteKey == 46)
+            *remoteKey = ImGuiKey_Delete;
+        else if(*remoteKey == 9)
+            *remoteKey = ImGuiKey_Tab;
+        else if(*remoteKey == 8)
+            *remoteKey = ImGuiKey_Backspace;
+        else if(*remoteKey == 65 && isCtrlPressed)
+            *remoteKey = 'a';
+        else if(*remoteKey == 67 && isCtrlPressed)
+            *remoteKey = 'c';
+        else if(*remoteKey == 86 && isCtrlPressed)
+            *remoteKey = 'v';
+        else if(*remoteKey == 88 && isCtrlPressed)
+            *remoteKey = 'x';
+        else
+            return true;
+        
+        return false;
+    }
 	virtual void OnMessage(OpCode opcode, const void *data, int size)
 	{
 		switch (opcode)
@@ -140,9 +168,10 @@ struct WebSocketServer : public IWebSocketServer
 					{
 						//update key states
 						FrameReceived = Frame;
-						Input.KeysDown[key] = true;
 						Input.KeyShift = shift > 0;
 						Input.KeyCtrl = ctrl > 0;
+                        mapRemoteKey(&key, Input.KeyCtrl);
+						Input.KeysDown[key] = true;
 					}
 				}
 				else if (strstr((char *)data, "ImKeyUp"))
@@ -159,8 +188,8 @@ struct WebSocketServer : public IWebSocketServer
 				}
 				else if (strstr((char *)data, "ImKeyPress"))
 				{
-					char key;
-					if (sscanf((char *)data, "ImKeyPress=%c", &key) == 1)
+                    unsigned int key;
+					if (sscanf((char *)data, "ImKeyPress=%d", &key) == 1)
 						ImGui::GetIO().AddInputCharacter(key);
 				}
 				else if (strstr((char *)data, "ImClipboard="))

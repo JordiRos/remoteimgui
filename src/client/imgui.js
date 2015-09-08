@@ -330,7 +330,6 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         else {
             if( clientactive )
             {
-                console.log("ImMousePress=" + mouse_left + "," + mouse_right);
                 websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
             }
         }
@@ -344,10 +343,10 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         if( camera_drag ) {
             camera_drag = false;
         }
-        else {
+        else
+        {
             if (clientactive)
             {
-                console.log("ImMousePress=" + mouse_left + "," + mouse_right);
                 websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
             }
         }
@@ -360,32 +359,72 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         if( event.which == 1 && clientactive )
             websocket.send("ImMouseWheelDelta=" + event.wheelDelta);
     }            
-
+    var osxCommandKey = false;
+    function isSpecialKey(event)
+    {
+        var key = event.which;
+        if( (key == 91 && event.metaKey) || // Mac Command (Left)
+            (key == 93 && event.metaKey))   // Mac Command (Right)
+        {
+            osxCommandKey = true;
+            event.ctrlKey = true;
+            return true;
+        }
+        if( (key < 32)              ||
+            (key >= 37 && key<= 40) ||  // Arrows
+            (key == 46)             ||  // Mac Backspace
+            (key >= 112 && key <= 123 )
+            )
+        {
+            return true;
+        }
+        if(key == 65 || key == 67 || key == 88 || key == 86) // 'A', 'C', 'X', 'V'
+        {
+            if(osxCommandKey || event.ctrlKey)
+                return true;
+        }
+    }
+    
     function onKeyDown( event ) {
         if( !event ) event = window.event;
+        
         // do not prevent paste
-        if( event.which == 86 && event.ctrlKey )
+        if( event.which == 86 && (event.ctrlKey || osxCommandKey )) // CTRL+V
+        {
             return;
+        }
         // prevent special keys
-        if( event.which < 32 || ( event.which >= 112 && event.which <= 123 ) ) {
+        if(isSpecialKey(event))
+        {
             event.preventDefault();
             if( clientactive )
-                websocket.send( "ImKeyDown=" + event.which + "," + ( event.shiftKey?1:0 ) + "," + ( event.ctrlKey?1:0 ) );
+            {
+                var isCtrl =  (osxCommandKey || event.ctrlKey)?1:0;
+                websocket.send( "ImKeyDown=" + event.which + "," + ( event.shiftKey?1:0 ) + "," + isCtrl );
+            }
         }
     }
 
     function onKeyUp( event ) {
         if( !event ) event = window.event;
-        if( event.which != 0 ) {
-            if( clientactive )
-                websocket.send( "ImKeyUp=" + event.which );
+        if( event.which != 0 )
+        {
+            if(osxCommandKey || isSpecialKey(event))
+            {
+                osxCommandKey = false;
+                if( clientactive )
+                {
+                    websocket.send( "ImKeyUp=" + event.which );
+                }
+            }
         }
     }
 
     function onKeyPress( event ) {
         if( !event ) event = window.event;
-        if( clientactive ) {
-            websocket.send( "ImKeyPress=" + String.fromCharCode( event.charCode ) );
+        if( clientactive )
+        {
+            websocket.send( "ImKeyPress=" + event.charCode);
         }
     }
 
@@ -395,7 +434,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         if (event.which != 0) {
             if( clientactive ) {
                 websocket.send( "ImClipboard=" + event.clipboardData.getData('Text') );
-                websocket.send( "ImKeyDown=86,0,1" );
+                setTimeout(function(){
+                websocket.send( "ImKeyDown=86,0,1" )}, 100);
             }
         }
     }
@@ -479,9 +519,9 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     function onRenderBackground()
     {
         if (clientactive) {
+            renderer.enableScissorTest(false);
             renderer.setClearColor( 0x72909A );
             renderer.clear( true, true, false );
-            renderer.enableScissorTest(false);
             // render background (visual reference of device canvas)
             renderer.render( scene_background, camera );
             return true;
@@ -489,7 +529,8 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         }
         else {
             // darken background
-            renderer.setClearColor( 0x546A71 );
+            renderer.enableScissorTest(false);
+            renderer.setClearColor( 0x444444 );
             renderer.clear( true, true, false );
             return false;
         }

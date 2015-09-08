@@ -228,7 +228,7 @@ void InitImGui()
     LoadFontsTexture();
 
 	// @RemoteImgui begin
-	ImGui::RemoteInit("127.0.0.1", 7002); // local host, local port
+	ImGui::RemoteInit("0.0.0.0", 7002); // local host, local port
 	//ImGui::GetStyle().WindowRounding = 0.f; // no rounding uses less bandwidth
 	io.DisplaySize = ImVec2((float)VCANVAS_WIDTH, (float)VCANVAS_HEIGHT);
 	// @RemoteImgui end
@@ -264,10 +264,47 @@ void UpdateImGui()
 		io.MouseDown[0] = (input.MouseButtons & 1);
 		io.MouseDown[1] = (input.MouseButtons & 2) != 0;
 		io.MouseWheel += input.MouseWheelDelta *0.01f;
+		// Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
+		io.KeyMap[ImGuiKey_Tab] = ImGuiKey_Tab;
+		io.KeyMap[ImGuiKey_LeftArrow] = ImGuiKey_LeftArrow;
+		io.KeyMap[ImGuiKey_RightArrow] = ImGuiKey_RightArrow;
+		io.KeyMap[ImGuiKey_UpArrow] = ImGuiKey_UpArrow;
+		io.KeyMap[ImGuiKey_DownArrow] = ImGuiKey_DownArrow;
+		io.KeyMap[ImGuiKey_Home] = ImGuiKey_Home;
+		io.KeyMap[ImGuiKey_End] = ImGuiKey_End;
+		io.KeyMap[ImGuiKey_Delete] = ImGuiKey_Delete;
+		io.KeyMap[ImGuiKey_Backspace] = ImGuiKey_Backspace;
+		io.KeyMap[ImGuiKey_Enter] = 13;
+		io.KeyMap[ImGuiKey_Escape] = 27;
+		io.KeyMap[ImGuiKey_A] = 'a';
+		io.KeyMap[ImGuiKey_C] = 'c';
+		io.KeyMap[ImGuiKey_V] = 'v';
+		io.KeyMap[ImGuiKey_X] = 'x';
+		io.KeyMap[ImGuiKey_Y] = 'y';
+		io.KeyMap[ImGuiKey_Z] = 'z';
 	}
 	else
 	// @RemoteImgui end
 	{
+		// Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
+		io.KeyMap[ImGuiKey_Tab] = 9;
+		io.KeyMap[ImGuiKey_LeftArrow] = ImGuiKey_LeftArrow;
+		io.KeyMap[ImGuiKey_RightArrow] = ImGuiKey_RightArrow;
+		io.KeyMap[ImGuiKey_UpArrow] = ImGuiKey_UpArrow;
+		io.KeyMap[ImGuiKey_DownArrow] = ImGuiKey_DownArrow;
+		io.KeyMap[ImGuiKey_Home] = ImGuiKey_Home;
+		io.KeyMap[ImGuiKey_End] = ImGuiKey_End;
+		io.KeyMap[ImGuiKey_Delete] = ImGuiKey_Delete;
+		io.KeyMap[ImGuiKey_Backspace] = 127;
+		io.KeyMap[ImGuiKey_Enter] = 13;
+		io.KeyMap[ImGuiKey_Escape] = 27;
+		io.KeyMap[ImGuiKey_A] = 'a';
+		io.KeyMap[ImGuiKey_C] = 'c';
+		io.KeyMap[ImGuiKey_V] = 'v';
+		io.KeyMap[ImGuiKey_X] = 'x';
+		io.KeyMap[ImGuiKey_Y] = 'y';
+		io.KeyMap[ImGuiKey_Z] = 'z';
+
 		// Setup inputs
 		// (we already got mouse wheel, keyboard keys & characters from glfw callbacks polled in glfwPollEvents())
 		double mouse_x, mouse_y;

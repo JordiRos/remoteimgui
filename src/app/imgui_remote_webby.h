@@ -128,8 +128,8 @@ struct IWebSocketServer
 		std::vector<unsigned char> buffer(frame->payload_length+1);
 		WebbyRead(connection, &buffer[0], frame->payload_length);
 		buffer[frame->payload_length] = 0;
-
-		printf("  Data : %s\n", &buffer[0]);
+//        if(!strstr((char*)&buffer[0],"ImMouseMove"))
+//            printf("  Data : %s\n", &buffer[0]);
 
 		OnMessage((OpCode)frame->opcode, &buffer[0], frame->payload_length);
 

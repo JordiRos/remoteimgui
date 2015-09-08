@@ -163,29 +163,13 @@ void InitImGui()
     ImGuiIO& io = ImGui::GetIO();
     //io.DisplaySize = ImVec2((float)display_w, (float)display_h);   // Display size, in pixels. For clamping windows positions.
     io.DeltaTime = 1.0f / 60.0f;                                     // Time elapsed since last frame, in seconds (in this sample app we'll override this every frame because our time step is variable)
-    io.KeyMap[ImGuiKey_Tab] = VK_TAB;                              // Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array that we will update during the application lifetime.
-    io.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
-    io.KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
-    io.KeyMap[ImGuiKey_UpArrow] = VK_UP;
-    io.KeyMap[ImGuiKey_DownArrow] = VK_UP;
-    io.KeyMap[ImGuiKey_Home] = VK_HOME;
-    io.KeyMap[ImGuiKey_End] = VK_END;
-    io.KeyMap[ImGuiKey_Delete] = VK_DELETE;
-    io.KeyMap[ImGuiKey_Backspace] = VK_BACK;
-    io.KeyMap[ImGuiKey_Enter] = VK_RETURN;
-    io.KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
-    io.KeyMap[ImGuiKey_A] = 'A';
-    io.KeyMap[ImGuiKey_C] = 'C';
-    io.KeyMap[ImGuiKey_V] = 'V';
-    io.KeyMap[ImGuiKey_X] = 'X';
-    io.KeyMap[ImGuiKey_Y] = 'Y';
-    io.KeyMap[ImGuiKey_Z] = 'Z';
+ 
 
     io.RenderDrawListsFn = ImImpl_RenderDrawLists;
 
     LoadFontsTexture();
 	// @RemoteImgui begin
-	ImGui::RemoteInit("127.0.0.1", 7002); // local host, local port
+	ImGui::RemoteInit("0.0.0.0", 7002); // local host, local port
 	//ImGui::GetStyle().WindowRounding = 0.f; // no rounding uses less bandwidth
 	io.DisplaySize = ImVec2((float)VCANVAS_WIDTH, (float)VCANVAS_HEIGHT);
 	// @RemoteImgui end
@@ -208,7 +192,6 @@ void UpdateImGui()
 	ImGui::RemoteInput input;
 	if (ImGui::RemoteGetInput(input))
 	{
-		ImGuiIO& io = ImGui::GetIO();
 		for (int i = 0; i < 256; i++)
 			io.KeysDown[i] = input.KeysDown[i];
 		io.KeyCtrl = input.KeyCtrl;
@@ -217,6 +200,25 @@ void UpdateImGui()
 		io.MouseDown[0] = (input.MouseButtons & 1);
 		io.MouseDown[1] = (input.MouseButtons & 2) != 0;
 		io.MouseWheel += input.MouseWheelDelta * 0.01f;
+
+		// Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array that we will update during the application lifetime.
+		io.KeyMap[ImGuiKey_Tab] = ImGuiKey_Tab;
+		io.KeyMap[ImGuiKey_LeftArrow] = ImGuiKey_LeftArrow;
+		io.KeyMap[ImGuiKey_RightArrow] = ImGuiKey_RightArrow;
+		io.KeyMap[ImGuiKey_UpArrow] = ImGuiKey_UpArrow;
+		io.KeyMap[ImGuiKey_DownArrow] = ImGuiKey_DownArrow;
+		io.KeyMap[ImGuiKey_Home] = ImGuiKey_Home;
+		io.KeyMap[ImGuiKey_End] = ImGuiKey_End;
+		io.KeyMap[ImGuiKey_Delete] = ImGuiKey_Delete;
+		io.KeyMap[ImGuiKey_Backspace] = ImGuiKey_Backspace;
+		io.KeyMap[ImGuiKey_Enter] = 13;
+		io.KeyMap[ImGuiKey_Escape] = 27;
+		io.KeyMap[ImGuiKey_A] = 'a';
+		io.KeyMap[ImGuiKey_C] = 'c';
+		io.KeyMap[ImGuiKey_V] = 'v';
+		io.KeyMap[ImGuiKey_X] = 'x';
+		io.KeyMap[ImGuiKey_Y] = 'y';
+		io.KeyMap[ImGuiKey_Z] = 'z';
 	}
 	else // @RemoteImgui end
 	{
@@ -232,6 +234,25 @@ void UpdateImGui()
 		// io.MousePos : filled by WM_MOUSEMOVE event
 		// io.MouseDown : filled by WM_*BUTTON* events
 		// io.MouseWheel : filled by WM_MOUSEWHEEL events
+		
+		// Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array that we will update during the application lifetime.
+		io.KeyMap[ImGuiKey_Tab] = VK_TAB;                              
+		io.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
+		io.KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
+		io.KeyMap[ImGuiKey_UpArrow] = VK_UP;
+		io.KeyMap[ImGuiKey_DownArrow] = VK_UP;
+		io.KeyMap[ImGuiKey_Home] = VK_HOME;
+		io.KeyMap[ImGuiKey_End] = VK_END;
+		io.KeyMap[ImGuiKey_Delete] = VK_DELETE;
+		io.KeyMap[ImGuiKey_Backspace] = VK_BACK;
+		io.KeyMap[ImGuiKey_Enter] = VK_RETURN;
+		io.KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
+		io.KeyMap[ImGuiKey_A] = 'A';
+		io.KeyMap[ImGuiKey_C] = 'C';
+		io.KeyMap[ImGuiKey_V] = 'V';
+		io.KeyMap[ImGuiKey_X] = 'X';
+		io.KeyMap[ImGuiKey_Y] = 'Y';
+		io.KeyMap[ImGuiKey_Z] = 'Z';
 	}
 
     // Start the frame
