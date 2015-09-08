@@ -199,7 +199,7 @@ void UpdateImGui()
 		io.MousePos = input.MousePos;
 		io.MouseDown[0] = (input.MouseButtons & 1);
 		io.MouseDown[1] = (input.MouseButtons & 2) != 0;
-		io.MouseWheel += input.MouseWheelDelta * 0.01f;
+		io.MouseWheel += input.MouseWheelDelta / highDpiScale;
 
 		// Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array that we will update during the application lifetime.
 		io.KeyMap[ImGuiKey_Tab] = ImGuiKey_Tab;
@@ -635,7 +635,7 @@ LRESULT CALLBACK WndProc(   HWND    hWnd,           // Handle For This Window
             io.MouseDown[1] = false;
             return true;
         case WM_MOUSEWHEEL:
-            io.MouseWheel += GET_WHEEL_DELTA_WPARAM(wParam) / 100.0f;// > 0 ? +0.1f : -0.1f;
+            io.MouseWheel += GET_WHEEL_DELTA_WPARAM(wParam) / 200.0f;// > 0 ? +0.1f : -0.1f;
             return true;
         case WM_MOUSEMOVE:
             // Mouse position, in pixels (set to -1,-1 if no mouse / on another screen, etc.)

@@ -263,7 +263,7 @@ void UpdateImGui()
 		io.MousePos = input.MousePos;
 		io.MouseDown[0] = (input.MouseButtons & 1);
 		io.MouseDown[1] = (input.MouseButtons & 2) != 0;
-		io.MouseWheel += input.MouseWheelDelta *0.01f;
+		io.MouseWheel += input.MouseWheelDelta;
 		// Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
 		io.KeyMap[ImGuiKey_Tab] = ImGuiKey_Tab;
 		io.KeyMap[ImGuiKey_LeftArrow] = ImGuiKey_LeftArrow;

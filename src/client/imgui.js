@@ -29,16 +29,14 @@ var ImVS = [
 
     "varying vec3 vColor;",
     "varying vec2 vUv;",
-    "varying vec4 vPos;",
     "varying float vAlpha;",
 
     "void main() {",
 
         "vColor = color;",
         "vUv = uv;",
-        "vPos = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
         "vAlpha = alpha;",
-        "gl_Position = vPos;",
+        "gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
 
     "}" ].join("\n");
 
@@ -170,6 +168,9 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     elem.addEventListener( 'mousedown', onMouseDown, false );
     elem.addEventListener( 'mouseup', onMouseUp, false );
     elem.addEventListener( 'mousewheel', onMouseWheel, false );
+    elem.addEventListener( 'touchmove', onTouchMove, false );
+    elem.addEventListener( 'touchstart', onTouchStart, false );
+    elem.addEventListener( 'touchend', onTouchEnd, false );
     window.addEventListener( 'keydown', onKeyDown, false );
     window.addEventListener( 'keyup', onKeyUp, false );
     window.addEventListener( 'keypress', onKeyPress, false );
@@ -352,13 +353,122 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         }
     }
 
+var getPointerEvent = function(event) {
+    return event.originalEvent.targetTouches ? event.originalEvent.targetTouches[0] : event;
+};
+var touchStarted = false, // detect if a touch event is sarted
+    currX = 0,
+    currY = 0,
+    cachedX = 0,
+    cachedY = 0,
+    touchDragging = false,
+    touchInertial = false,
+    touchPressTimeout;
+
+    function onTouchStart( event ) 
+    {
+        if( !event ) event = window.event;
+        event.preventDefault(); 
+        var pointer =  event; //getPointerEvent(event);
+        if(touchInertial)
+        {
+            clearInterval(ticker);
+            touchInertial = false;
+        }
+        // caching the current x
+        cachedX = currX = pointer.pageX;
+        // caching the current y
+        cachedY = currY = pointer.pageY;
+        // a touch event is detected      
+        websocket.send("ImMouseMove=" + currX + "," + currY + ",0,0");
+
+        setTimeout(function (){
+            touchStarted = true;
+            //if ((cachedX === currX) && !touchStarted && (cachedY === currY)) 
+            //console.log("50ms ImMousePress=1,0");
+            websocket.send("ImMousePress=1,0");
+            // detecting if after 200ms the finger is still in the same position
+            clearTimeout(touchPressTimeout);
+            touchPressTimeout = setTimeout(function ()
+            {
+                if ((cachedX === currX) && (cachedY === currY)) 
+                {
+                    //console.log("200ms ImMousePress=0,0");
+                    websocket.send("ImMousePress=0,0");
+                    touchStarted = false;
+                }
+            },150);
+        },50);
+      
+    
+    }    
+    var amplitude,initialVelocity, step,ticker,position,timeConstant = 325,scaleFactor = 2, updateInterval = 20;
+    function onTouchEnd( event ) 
+    {
+        if( !event ) event = window.event;
+        event.preventDefault();
+        // here we can consider finished the touch event
+        if(touchDragging)
+        {
+            amplitude = initialVelocity * scaleFactor;
+            targetPosition = position + amplitude;
+            timestamp = Date.now();
+            touchInertial = true;
+            ticker = setInterval(function()
+            {
+                var elapsed = Date.now() - timestamp;
+                var delta = amplitude * Math.exp(-elapsed / timeConstant);
+                websocket.send("ImMouseWheelDelta=" + delta);
+                position = targetPosition - delta;
+                if (elapsed > 6 * timeConstant) 
+                {
+                    touchInertial = false;
+                    clearInterval(ticker);
+                }
+            }, updateInterval);
+
+        }
+        else if(touchStarted)
+        {
+            clearTimeout(touchPressTimeout);
+            //console.log("ontouchend ImMousePress=0,0");
+            websocket.send("ImMousePress=0,0");
+        }
+        touchStarted = false;
+        touchDragging = false;
+    }
+
+    function onTouchMove( event ) 
+    {
+        if( !event ) event = window.event;
+        event.preventDefault();
+        var pointer = event; //getPointerEvent(e);
+        currX = pointer.pageX;
+        currY = pointer.pageY;
+        if(touchStarted) 
+        {
+             // here you are swiping
+             if( clientactive )
+             {
+                touchDragging = true;
+                var diffY = (currY - cachedY) * 5;
+                cachedY = currY;
+                initialVelocity = diffY;
+                //websocket.send("ImMouseMove=" + currX + "," + currY + ",1,0");        
+                console.log("ImMouseWheelDelta=" + diffY);
+                websocket.send("ImMouseWheelDelta=" + diffY);
+             }
+        }   
+    }
+
     function onMouseWheel( event ) {
         if( !event ) event = window.event;
         event.preventDefault();
         //if( event.which == 1 ) mouse_wheel += event.wheelDelta;
         if( event.which == 1 && clientactive )
             websocket.send("ImMouseWheelDelta=" + event.wheelDelta);
-    }            
+    }          
+
     var osxCommandKey = false;
     function isSpecialKey(event)
     {

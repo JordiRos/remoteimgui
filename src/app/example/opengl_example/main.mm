@@ -154,9 +154,12 @@ void IMGUIExample_Draw(double elapsedMilliseconds)
 		io.KeyCtrl = input.KeyCtrl;
 		io.KeyShift = input.KeyShift;
 		io.MousePos = input.MousePos;
+        g_mouseCoords[0] = io.MousePos.x;
+        g_mouseCoords[1] = io.MousePos.y;
 		io.MouseDown[0] = (input.MouseButtons & 1);
 		io.MouseDown[1] = (input.MouseButtons & 2) != 0;
-		io.MouseWheel += input.MouseWheelDelta * 0.005f;
+		io.MouseWheel += input.MouseWheelDelta / highDpiScale;
+
         // Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
         io.KeyMap[ImGuiKey_Tab] = ImGuiKey_Tab;
         io.KeyMap[ImGuiKey_LeftArrow] = ImGuiKey_LeftArrow;
@@ -296,15 +299,6 @@ void IMGUIExample_Draw(double elapsedMilliseconds)
 
 - (void)drawView
 {
-    NSWindow *mainWindow = [self window];
-    NSPoint mousePosition = [mainWindow mouseLocationOutsideOfEventStream];
-
-    //convert to View
-    mousePosition = [self convertPoint:mousePosition fromView:nil];
-
-    g_mouseCoords[0] = mousePosition.x;
-    g_mouseCoords[1] = mousePosition.y - 1.0f;
-
     clock_t thisclock = clock();
     unsigned long clock_delay = thisclock - g_lastClock;
     double milliseconds = clock_delay * 1000.0f / CLOCKS_PER_SEC;
@@ -501,6 +495,24 @@ static void resetKeys()
     g_mousePressed[button] = false;
 }
 
+-(void)mouseMoved:(NSEvent *)theEvent
+{
+    NSWindow *mainWindow = [self window];
+    NSPoint mousePosition = [mainWindow mouseLocationOutsideOfEventStream];
+    mousePosition = [self convertPoint:mousePosition fromView:nil];
+    g_mouseCoords[0] = mousePosition.x;
+    g_mouseCoords[1] = mousePosition.y - 1.0f;
+}
+
+-(void)mouseDragged:(NSEvent *)theEvent
+{
+    NSWindow *mainWindow = [self window];
+    NSPoint mousePosition = [mainWindow mouseLocationOutsideOfEventStream];
+    mousePosition = [self convertPoint:mousePosition fromView:nil];
+    g_mouseCoords[0] = mousePosition.x;
+    g_mouseCoords[1] = mousePosition.y - 1.0f;
+}
+
 - (void)scrollWheel:(NSEvent *)event
 {
     double deltaX, deltaY;
@@ -527,7 +539,7 @@ static void resetKeys()
     if (fabs(deltaX) > 0.0 || fabs(deltaY) > 0.0)
     {
         ImGuiIO& io = ImGui::GetIO();
-        io.MouseWheel += deltaY * 0.1f;
+        io.MouseWheel += deltaY * 0.05f;
     }
 }
 
@@ -625,6 +637,10 @@ static void resetKeys()
         NSLog(@"No OpenGL Context!");
     }
     IMGUIExample_InitImGui();
+    // This is needed to accept mouse move events
+    [self.window setAcceptsMouseMovedEvents:YES];
+    // This is needed to accept mouse events before clicking on the window
+    [self.window makeFirstResponder:view];
 }
 
 @end

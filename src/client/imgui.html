@@ -14,6 +14,12 @@
     {
         touch-action: none; /* Disable touch behaviors, like pan and zoom */
     }
+    body 
+    {
+    	position: fixed; 
+	    overflow-y: scroll;
+    	width: 100%;
+    }
 </style>
 
 </head>
@@ -29,7 +35,10 @@
 	<div id="imgui_container"></div>
 
 	<script>
-
+		document.ontouchmove = function(event)
+		{
+    		event.preventDefault();
+		}
 		// parse index.html?host=address
 		document.getElementById('host').value = getQueryVariable("host");
 		if (document.getElementById('host').value != "") {
