@@ -164,16 +164,22 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
 
     // canvas events (will send to imgui)
     var elem = renderer.domElement;
+     //FF doesn't recognize mousewheel as of FF3.x 
+    var mousewheelevt=(/Firefox/i.test(navigator.userAgent))? "DOMMouseScroll" : "mousewheel"
+    elem.addEventListener(mousewheelevt, onMouseWheel, false)
+
     elem.addEventListener( 'mousemove', onMouseMove, false );
     elem.addEventListener( 'mousedown', onMouseDown, false );
     elem.addEventListener( 'mouseup', onMouseUp, false );
-    elem.addEventListener( 'mousewheel', onMouseWheel, false );
+
     elem.addEventListener( 'touchmove', onTouchMove, false );
     elem.addEventListener( 'touchstart', onTouchStart, false );
     elem.addEventListener( 'touchend', onTouchEnd, false );
+
     window.addEventListener( 'keydown', onKeyDown, false );
     window.addEventListener( 'keyup', onKeyUp, false );
     window.addEventListener( 'keypress', onKeyPress, false );
+    
     window.addEventListener( 'paste', onPaste, false );
     window.addEventListener( 'resize', onWindowResize, false );
     document.oncontextmenu = document.body.oncontextmenu = function() { return false; }
@@ -466,7 +472,10 @@ var touchStarted = false, // detect if a touch event is sarted
         event.preventDefault();
         //if( event.which == 1 ) mouse_wheel += event.wheelDelta;
         if( event.which == 1 && clientactive )
-            websocket.send("ImMouseWheelDelta=" + event.wheelDelta);
+        {
+            var delta=event.detail? event.detail*(-120)/4 : event.wheelDelta
+            websocket.send("ImMouseWheelDelta=" + delta);
+        }
     }          
 
     var osxCommandKey = false;

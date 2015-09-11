@@ -893,7 +893,8 @@ static int is_websocket_request(struct WebbyConnection* conn)
   if (NULL == (hdr = WebbyFindHeader(conn, "Connection")))
     return 0;
 
-  if (0 != strcasecmp(hdr, "Upgrade"))
+  //Firefox sends: "keep-alive, Upgrade"
+  if (0 == strstr(hdr, "Upgrade"))
     return 0;
 
   if (NULL == (hdr = WebbyFindHeader(conn, "Upgrade")))
