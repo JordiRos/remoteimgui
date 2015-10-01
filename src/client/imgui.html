@@ -47,7 +47,8 @@
 		}
 		else {
 			// if not found, use local storage for saved settings
-			document.getElementById('host').value = localStorage.getItem("imgui_host");
+			if(localStorage)
+				document.getElementById('host').value = localStorage.getItem("imgui_host");
 		}
 
 		function getQueryVariable( variable ) {
@@ -66,7 +67,8 @@
 			var host = document.getElementById('host').value;
 			var port = 7002;
 			if (host != "") {
-				localStorage.setItem("imgui_host", host);
+				if(localStorage)
+					localStorage.setItem("imgui_host", host);
 				document.getElementById("imgui_connect").style.display = 'none';
 				StartImgui( document.getElementById( 'imgui_container' ), "ws://" + host + ":" + port, 1920, 1080, true );
          	}
