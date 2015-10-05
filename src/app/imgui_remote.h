@@ -158,7 +158,7 @@ struct WebSocketServer : public IWebSocketServer
 					if (sscanf((char *)data, "ImMouseWheelDelta=%f", &mouseWheelDelta) == 1)
 					{
 						FrameReceived = Frame;
-						Input.MouseWheelDelta = mouseWheelDelta *0.01;
+						Input.MouseWheelDelta = mouseWheelDelta *0.01f;
 					}
 				}
 				else if (strstr((char *)data, "ImKeyDown"))
