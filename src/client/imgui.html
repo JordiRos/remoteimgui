@@ -14,6 +14,12 @@
     {
         touch-action: none; /* Disable touch behaviors, like pan and zoom */
     }
+    body 
+    {
+    	position: fixed; 
+	    overflow-y: scroll;
+    	width: 100%;
+    }
 </style>
 
 </head>
@@ -29,7 +35,10 @@
 	<div id="imgui_container"></div>
 
 	<script>
-
+		document.ontouchmove = function(event)
+		{
+    		event.preventDefault();
+		}
 		// parse index.html?host=address
 		document.getElementById('host').value = getQueryVariable("host");
 		if (document.getElementById('host').value != "") {
@@ -38,7 +47,8 @@
 		}
 		else {
 			// if not found, use local storage for saved settings
-			document.getElementById('host').value = localStorage.getItem("imgui_host");
+			if(localStorage)
+				document.getElementById('host').value = localStorage.getItem("imgui_host");
 		}
 
 		function getQueryVariable( variable ) {
@@ -57,7 +67,8 @@
 			var host = document.getElementById('host').value;
 			var port = 7002;
 			if (host != "") {
-				localStorage.setItem("imgui_host", host);
+				if(localStorage)
+					localStorage.setItem("imgui_host", host);
 				document.getElementById("imgui_connect").style.display = 'none';
 				StartImgui( document.getElementById( 'imgui_container' ), "ws://" + host + ":" + port, 1920, 1080, true );
          	}

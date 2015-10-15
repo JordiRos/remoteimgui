@@ -1,4 +1,5 @@
-
+#define _CRT_SECURE_NO_WARNINGS 1
+#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #include "webby.h"
 
 /* Copyright (c) 2012, Andreas Fredriksson < dep at defmacro dot se > */
@@ -892,7 +893,8 @@ static int is_websocket_request(struct WebbyConnection* conn)
   if (NULL == (hdr = WebbyFindHeader(conn, "Connection")))
     return 0;
 
-  if (0 != strcasecmp(hdr, "Upgrade"))
+  //Firefox sends: "keep-alive, Upgrade"
+  if (0 == strstr(hdr, "Upgrade"))
     return 0;
 
   if (NULL == (hdr = WebbyFindHeader(conn, "Upgrade")))
@@ -1029,6 +1031,7 @@ static int scan_websocket_frame(const struct WebbyBuffer *buf, struct WebbyWsFra
 
 static void wb_update_client(struct WebbyServer *srv, struct WebbyConnectionPrv* connection)
 {
+   unsigned char* bufferBackup = connection->io_buf.data;
   /* This is no longer a fresh connection. Only read from it when select() says
    * so in the future. */
   connection->flags &= ~WB_FRESH_CONNECTION;
@@ -1229,6 +1232,7 @@ static void wb_update_client(struct WebbyServer *srv, struct WebbyConnectionPrv*
           return;
         }
 
+parseWebsocketFrame:
         connection->body_bytes_read = 0;
         connection->io_data_left = connection->io_buf.used - connection->ws_frame.header_size;
         dbg(srv, "%d bytes of incoming websocket data buffered", (int) connection->io_data_left);
@@ -1272,12 +1276,26 @@ static void wb_update_client(struct WebbyServer *srv, struct WebbyConnectionPrv*
             return;
           }
         }
-
         /* Back to non-blocking mode */
         if (0 != make_connection_nonblocking(connection))
           return;
 
+        if(connection->io_data_left > 0)
+        {
+            int dataToSkip  = connection->ws_frame.header_size + connection->ws_frame.payload_length;
+        
+            connection->io_buf.data += dataToSkip;
+            connection->io_buf.used -= dataToSkip;
+            connection->io_buf.max  -= dataToSkip;
+            connection->io_data_left-= dataToSkip;
+            if (0 != scan_websocket_frame(&connection->io_buf, &connection->ws_frame))
+            {
+                goto parseWebsocketFrame;
+            }
+        }
+
         reset_connection(srv, connection);
+        connection->io_buf.data = bufferBackup;
         connection->state = WBC_WEBSOCKET;
 
         break;

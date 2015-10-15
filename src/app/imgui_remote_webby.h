@@ -119,17 +119,17 @@ struct IWebSocketServer
 
 	int WsOnFrame(struct WebbyConnection *connection, const struct WebbyWsFrame *frame)
 	{
-		printf("WebSocket frame incoming\n");
-		printf("  Frame OpCode: %d\n", frame->opcode);
-		printf("  Final frame?: %s\n", (frame->flags & WEBBY_WSF_FIN) ? "yes" : "no");
-		printf("  Masked?     : %s\n", (frame->flags & WEBBY_WSF_MASKED) ? "yes" : "no");
-		printf("  Data Length : %d\n", (int) frame->payload_length);
+//		printf("WebSocket frame incoming\n");
+//		printf("  Frame OpCode: %d\n", frame->opcode);
+//		printf("  Final frame?: %s\n", (frame->flags & WEBBY_WSF_FIN) ? "yes" : "no");
+//		printf("  Masked?     : %s\n", (frame->flags & WEBBY_WSF_MASKED) ? "yes" : "no");
+//		printf("  Data Length : %d\n", (int) frame->payload_length);
 
 		std::vector<unsigned char> buffer(frame->payload_length+1);
 		WebbyRead(connection, &buffer[0], frame->payload_length);
 		buffer[frame->payload_length] = 0;
-
-		printf("  Data : %s\n", &buffer[0]);
+//        if(!strstr((char*)&buffer[0],"ImMouseMove"))
+//            printf("  Data : %s\n", &buffer[0]);
 
 		OnMessage((OpCode)frame->opcode, &buffer[0], frame->payload_length);
 

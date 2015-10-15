@@ -29,33 +29,26 @@ var ImVS = [
 
     "varying vec3 vColor;",
     "varying vec2 vUv;",
-    "varying vec4 vPos;",
     "varying float vAlpha;",
 
     "void main() {",
 
         "vColor = color;",
         "vUv = uv;",
-        "vPos = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
         "vAlpha = alpha;",
-        "gl_Position = vPos;",
+        "gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
 
     "}" ].join("\n");
 
 var ImFS = [
     "varying vec3 vColor;",
     "varying vec2 vUv;",
-    "varying vec4 vPos;",
     "varying float vAlpha;",
-
-    "uniform vec4 uClip;",
+    
     "uniform sampler2D tTex;",
 
     "void main() {",
-        "if( ( vPos.x >= uClip.x && vPos.y >= uClip.y && vPos.x < uClip.z && vPos.y < uClip.w ) || uClip.z == -9999.0 && uClip.w == -9999.0 )",
             "gl_FragColor = vec4( vColor, texture2D( tTex, vUv ).a * vAlpha );",
-        "else",
-            "gl_FragColor = vec4( 0.0, 0.0, 0.0, 0.0 );",
     "}" ].join("\n");
 
 var ImguiGui = function() {
@@ -81,7 +74,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     var clientactive = false;
     var frame = 0;
     var mouse = { x: 0, y: 0, l: 0, r: 0, w: 0, update: false };
-    var cur_vtx;
+    var curElem;
     var prev_data;
 
     var camera_offset = { x: 0, y: 0 };
@@ -96,8 +89,6 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     renderer.autoClear = false;
     renderer.setSize( width, height );
 
-    // scene
-    var scene = new THREE.Scene();
 
     // camera
     var camera = new THREE.OrthographicCamera( 0, width, 0, height, -1, 1 );
@@ -112,16 +103,6 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
 
     // imgui dynamic geometry / meshes
     // FIXME: Support for any number of triangles.
-    var MAX_TRIANGLES = 10000;
-    var geometry = new THREE.BufferGeometry();
-    geometry.addAttribute( 'index',    new THREE.BufferAttribute( new Uint32Array ( MAX_TRIANGLES * 1 * 3 ), 1 ) );
-    geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
-    geometry.addAttribute( 'uv',       new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 2 * 3 ), 2 ) );
-    geometry.addAttribute( 'color',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
-    geometry.addAttribute( 'alpha',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 1     ), 1 ) );
-    geometry.dynamic = true;
-    geometry.offsets = [ { start: 0, index: 0, count: 0 } ];
-
     // material
     var guniforms = {
         tTex: { type: 't', value: null },
@@ -138,37 +119,67 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         vertexColors: THREE.VertexColors,
         transparent: true,
         side: THREE.DoubleSide } );
-    var mesh = new THREE.Mesh( geometry, material );
-    mesh.frustumCulled = false;
-    scene.add( mesh );
 
+    var MAX_DRAW_LISTS= 20;
+    var geometries = [];
+    var scenes = [];
+    var scene;
+    var geometry;
+    for(var i = 0; i < MAX_DRAW_LISTS; i++)
+    {
+        // scene
+        scene = new THREE.Scene();
+        scenes.push(scene);
+        geometry = new THREE.BufferGeometry();
+        var MAX_TRIANGLES = 21844; // *3 ~= 65536
+        geometry.addAttribute( 'index',    new THREE.BufferAttribute( new Uint16Array ( MAX_TRIANGLES * 3 ), 1 ) );
+        geometry.addAttribute( 'position', new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
+        geometry.addAttribute( 'uv',       new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 2 * 3 ), 2 ) );
+        geometry.addAttribute( 'color',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 3 * 3 ), 3 ) );
+        geometry.addAttribute( 'alpha',    new THREE.BufferAttribute( new Float32Array( MAX_TRIANGLES * 1     ), 1 ) );
+        geometry.dynamic = true;
+        geometry.offsets = [ { start: 0, index: 0, count: 0 } ];
+        geometries.push(geometry);
+
+        var mesh = new THREE.Mesh( geometry, material );
+        mesh.frustumCulled = false;
+        scene.add( mesh );
+    }
+    geometry = null;
+    scene = null;
     // geometry shortcuts
-    var gindices = geometry.attributes.index.array;
-    var gpositions = geometry.attributes.position.array;
-    var guvs = geometry.attributes.uv.array;
-    var gcolors = geometry.attributes.color.array;
-    var galphas = geometry.attributes.alpha.array;
+    var gindices;
+    var gpositions;
+    var guvs;
+    var gcolors;
+    var galphas;
     var gcmdcount = 0;
     var gvtxcount = 0;
+    var gidxcount = 0;
+    var glistcount= 0;
     var gclips = [];
-
-    // fill indices (fixed for the whole geometry)
-    for( var i = 0; i < MAX_TRIANGLES*3; i++ )
-        gindices[i] = i;
-    geometry.attributes.index.needsUpdate = true;
 
     // add to element
     element.appendChild( renderer.domElement )
 
     // canvas events (will send to imgui)
     var elem = renderer.domElement;
+     //FF doesn't recognize mousewheel as of FF3.x 
+    var mousewheelevt=(/Firefox/i.test(navigator.userAgent))? "DOMMouseScroll" : "mousewheel"
+    elem.addEventListener(mousewheelevt, onMouseWheel, false)
+
     elem.addEventListener( 'mousemove', onMouseMove, false );
     elem.addEventListener( 'mousedown', onMouseDown, false );
     elem.addEventListener( 'mouseup', onMouseUp, false );
-    elem.addEventListener( 'mousewheel', onMouseWheel, false );
+
+    elem.addEventListener( 'touchmove', onTouchMove, false );
+    elem.addEventListener( 'touchstart', onTouchStart, false );
+    elem.addEventListener( 'touchend', onTouchEnd, false );
+
     window.addEventListener( 'keydown', onKeyDown, false );
     window.addEventListener( 'keyup', onKeyUp, false );
     window.addEventListener( 'keypress', onKeyPress, false );
+    
     window.addEventListener( 'paste', onPaste, false );
     window.addEventListener( 'resize', onWindowResize, false );
     document.oncontextmenu = document.body.oncontextmenu = function() { return false; }
@@ -309,7 +320,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             var x = event.clientX + camera.position.x;
             var y = event.clientY + camera.position.y;
             if( clientactive )
-                websocket.send("ImMouseMove=" + x + "," + y);
+                websocket.send("ImMouseMove=" + x + "," + y + "," + mouse_left + "," + mouse_right);
         }
     }
 
@@ -325,7 +336,9 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         }
         else {
             if( clientactive )
+            {
                 websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
+            }
         }
     }    
 
@@ -337,45 +350,200 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         if( camera_drag ) {
             camera_drag = false;
         }
-        else {
+        else
+        {
             if (clientactive)
+            {
                 websocket.send("ImMousePress=" + mouse_left + "," + mouse_right);
+            }
         }
+    }
+
+var getPointerEvent = function(event) {
+    return event.originalEvent.targetTouches ? event.originalEvent.targetTouches[0] : event;
+};
+var touchStarted = false, // detect if a touch event is sarted
+    currX = 0,
+    currY = 0,
+    cachedX = 0,
+    cachedY = 0,
+    touchDragging = false,
+    touchInertial = false,
+    touchPressTimeout;
+
+    function onTouchStart( event ) 
+    {
+        if( !event ) event = window.event;
+        event.preventDefault(); 
+        var pointer =  event; //getPointerEvent(event);
+        if(touchInertial)
+        {
+            clearInterval(ticker);
+            touchInertial = false;
+        }
+        // caching the current x
+        cachedX = currX = pointer.pageX;
+        // caching the current y
+        cachedY = currY = pointer.pageY;
+        // a touch event is detected      
+        websocket.send("ImMouseMove=" + currX + "," + currY + ",0,0");
+
+        setTimeout(function (){
+            touchStarted = true;
+            //if ((cachedX === currX) && !touchStarted && (cachedY === currY)) 
+            //console.log("50ms ImMousePress=1,0");
+            websocket.send("ImMousePress=1,0");
+            // detecting if after 200ms the finger is still in the same position
+            clearTimeout(touchPressTimeout);
+            touchPressTimeout = setTimeout(function ()
+            {
+                if ((cachedX === currX) && (cachedY === currY)) 
+                {
+                    //console.log("200ms ImMousePress=0,0");
+                    websocket.send("ImMousePress=0,0");
+                    touchStarted = false;
+                }
+            },150);
+        },50);
+      
+    
+    }    
+    var amplitude,initialVelocity, step,ticker,position,timeConstant = 325,scaleFactor = 2, updateInterval = 20;
+    function onTouchEnd( event ) 
+    {
+        if( !event ) event = window.event;
+        event.preventDefault();
+        // here we can consider finished the touch event
+        if(touchDragging)
+        {
+            amplitude = initialVelocity * scaleFactor;
+            targetPosition = position + amplitude;
+            timestamp = Date.now();
+            touchInertial = true;
+            ticker = setInterval(function()
+            {
+                var elapsed = Date.now() - timestamp;
+                var delta = amplitude * Math.exp(-elapsed / timeConstant);
+                websocket.send("ImMouseWheelDelta=" + delta);
+                position = targetPosition - delta;
+                if (elapsed > 6 * timeConstant) 
+                {
+                    touchInertial = false;
+                    clearInterval(ticker);
+                }
+            }, updateInterval);
+
+        }
+        else if(touchStarted)
+        {
+            clearTimeout(touchPressTimeout);
+            //console.log("ontouchend ImMousePress=0,0");
+            websocket.send("ImMousePress=0,0");
+        }
+        touchStarted = false;
+        touchDragging = false;
+    }
+
+    function onTouchMove( event ) 
+    {
+        if( !event ) event = window.event;
+        event.preventDefault();
+        var pointer = event; //getPointerEvent(e);
+        currX = pointer.pageX;
+        currY = pointer.pageY;
+        if(touchStarted) 
+        {
+             // here you are swiping
+             if( clientactive )
+             {
+                touchDragging = true;
+                var diffY = (currY - cachedY) * 5;
+                cachedY = currY;
+                initialVelocity = diffY;
+                //websocket.send("ImMouseMove=" + currX + "," + currY + ",1,0");        
+                console.log("ImMouseWheelDelta=" + diffY);
+                websocket.send("ImMouseWheelDelta=" + diffY);
+             }
+        }   
     }
 
     function onMouseWheel( event ) {
         if( !event ) event = window.event;
         event.preventDefault();
-        if( event.which == 1 ) mouse_wheel += event.wheelDelta;
-        if( clientactive )
-            websocket.send("ImMouseWheel=" + mouse_wheel);
-    }            
+        //if( event.which == 1 ) mouse_wheel += event.wheelDelta;
+        if( event.which == 1 && clientactive )
+        {
+            var delta=event.detail? event.detail*(-120)/4 : event.wheelDelta
+            websocket.send("ImMouseWheelDelta=" + delta);
+        }
+    }          
 
+    var osxCommandKey = false;
+    function isSpecialKey(event)
+    {
+        var key = event.which;
+        if( (key == 91 && event.metaKey) || // Mac Command (Left)
+            (key == 93 && event.metaKey))   // Mac Command (Right)
+        {
+            osxCommandKey = true;
+            event.ctrlKey = true;
+            return true;
+        }
+        if( (key < 32)              ||
+            (key >= 37 && key<= 40) ||  // Arrows
+            (key == 46)             ||  // Mac Backspace
+            (key >= 112 && key <= 123 )
+            )
+        {
+            return true;
+        }
+        if(key == 65 || key == 67 || key == 88 || key == 86) // 'A', 'C', 'X', 'V'
+        {
+            if(osxCommandKey || event.ctrlKey)
+                return true;
+        }
+    }
+    
     function onKeyDown( event ) {
         if( !event ) event = window.event;
+        
         // do not prevent paste
-        if( event.which == 86 && event.ctrlKey )
+        if( event.which == 86 && (event.ctrlKey || osxCommandKey )) // CTRL+V
+        {
             return;
+        }
         // prevent special keys
-        if( event.which < 32 || ( event.which >= 112 && event.which <= 123 ) ) {
+        if(isSpecialKey(event))
+        {
             event.preventDefault();
             if( clientactive )
-                websocket.send( "ImKeyDown=" + event.which + "," + ( event.shiftKey?1:0 ) + "," + ( event.ctrlKey?1:0 ) );
+            {
+                var isCtrl =  (osxCommandKey || event.ctrlKey)?1:0;
+                websocket.send( "ImKeyDown=" + event.which + "," + ( event.shiftKey?1:0 ) + "," + isCtrl );
+            }
         }
     }
 
     function onKeyUp( event ) {
         if( !event ) event = window.event;
-        if( event.which != 0 ) {
-            if( clientactive )
-                websocket.send( "ImKeyUp=" + event.which );
+        if( event.which != 0 )
+        {
+            if(osxCommandKey || isSpecialKey(event))
+            {
+                osxCommandKey = false;
+                if( clientactive )
+                {
+                    websocket.send( "ImKeyUp=" + event.which );
+                }
+            }
         }
     }
 
     function onKeyPress( event ) {
         if( !event ) event = window.event;
-        if( clientactive ) {
-            websocket.send( "ImKeyPress=" + String.fromCharCode( event.charCode ) );
+        if( clientactive )
+        {
+            websocket.send( "ImKeyPress=" + event.charCode);
         }
     }
 
@@ -385,41 +553,54 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         if (event.which != 0) {
             if( clientactive ) {
                 websocket.send( "ImClipboard=" + event.clipboardData.getData('Text') );
-                websocket.send( "ImKeyDown=86,0,1" );
+                setTimeout(function(){
+                websocket.send( "ImKeyDown=86,0,1" )}, 100);
             }
         }
     }
 
     function onMessage( data ) {
-        gcmdcount = data.readUint32();
-        gvtxcount = data.readUint32();
-        gclips.length = 0;
-        cur_vtx = 0;
-        // command lists
-        for( var i = 0; i < gcmdcount; i++ ) {
-            var num = data.readUint32();
-            var x = data.readFloat32();
-            var y = data.readFloat32();
-            var w = data.readFloat32();
-            var h = data.readFloat32();
-            var clip_x = x * 2 / width - 1;
-            var clip_y = y * 2 / height - 1;
-            var clip_w = w * 2 / width - 1;
-            var clip_h = h * 2 / height - 1;
-            gclips.push( { start: cur_vtx, index: 0, count: num, clip: new THREE.Vector4( clip_x, clip_y, clip_w, clip_h ) } );
-            cur_vtx+= num;
+        if(!onRenderBackground())
+            return;
+        glistcount= data.readUint32();
+        for(var l = 0 ; l < glistcount; l++)
+        {
+            geometry = geometries[l];
+            gcmdcount = data.readUint32();
+            gvtxcount = data.readUint32();
+            gidxcount = data.readUint32();
+            gindices = geometry.attributes.index.array;
+            gpositions = geometry.attributes.position.array;
+            guvs = geometry.attributes.uv.array;
+            gcolors = geometry.attributes.color.array;
+            galphas = geometry.attributes.alpha.array;
+            gclips.length = 0;
+            curElem = 0;
+            // command lists
+            for( var i = 0; i < gcmdcount; i++ ) {
+                var num = data.readUint32();
+                var x = data.readFloat32();
+                var y = data.readFloat32();
+                var w = data.readFloat32();
+                var h = data.readFloat32();
+                gclips.push( { start: curElem, index: 0, count: num, clip: new THREE.Vector4( x, y, w, h ) } );
+                curElem+= num;
+            }
+            // all vertices
+            for( var i = 0; i < gvtxcount; i++ ) {
+                addVtx( data, i )
+            }
+            for( var i = 0; i < gidxcount; i++ ) {
+                addIdx( data, i )
+            }
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.uv.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+            geometry.attributes.alpha.needsUpdate = true;
+            geometry.attributes.index.needsUpdate = true;
+            // update render and dat.gui
+            onRenderTriangles(scenes[l]);
         }
-        // all vertices
-        for( var i = 0; i < gvtxcount; i++ ) {
-            addVtx( data, i )
-        }
-        geometry.attributes.position.needsUpdate = true;
-        geometry.attributes.uv.needsUpdate = true;
-        geometry.attributes.color.needsUpdate = true;
-        geometry.attributes.alpha.needsUpdate = true;
-
-        // update render and dat.gui
-        onRender();
         onUpdateGui();
     }
 
@@ -439,40 +620,61 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         galphas   [ aidx   ] = data.readUint8AsFloat32();
     }    
 
+    function addIdx(data, idx)
+    {
+        gindices [ idx ] = data.readUint16();         
+    }
+
     function onRender() {
 
         // Use this to only render selected window
         //var idx = ( datgui.window == 'All' ) ? -1 : parseInt( datgui.window ) - 1;
+        if(onRenderBackground())
+        {
+            //onRenderTriangles();            
+        }
+    }
 
-        camera.position.x = camera_offset.x;
-        camera.position.y = camera_offset.y;
-
+    function onRenderBackground()
+    {
         if (clientactive) {
+            renderer.enableScissorTest(false);
             renderer.setClearColor( 0x72909A );
             renderer.clear( true, true, false );
-
             // render background (visual reference of device canvas)
             renderer.render( scene_background, camera );
-
-            // render command lists (or selected one)
-            for( var i = 0; i < gclips.length; i++ ) {
-                //if ( idx == -1 || idx == i ) {
-                {
-                    geometry.offsets[ 0 ].start = gclips[ i ].start;
-                    geometry.offsets[ 0 ].index = gclips[ i ].index;
-                    geometry.offsets[ 0 ].count = gclips[ i ].count;
-                    guniforms.uClip.value.x = gclips[ i ].clip.x - (camera.position.x*2) / width;
-                    guniforms.uClip.value.y = - ( gclips[ i ].clip.w - (camera.position.y*2) / height );
-                    guniforms.uClip.value.z = ( i == 0 ) ? -9999 : gclips[ i ].clip.z - (camera.position.x*2) / width;
-                    guniforms.uClip.value.w = ( i == 0 ) ? -9999 : - ( gclips[ i ].clip.y - (camera.position.y*2) / height );
-                    renderer.render( scene, camera );
-                }
-            }
+            return true;
+          
         }
         else {
             // darken background
-            renderer.setClearColor( 0x546A71 );
+            renderer.enableScissorTest(false);
+            renderer.setClearColor( 0x444444 );
             renderer.clear( true, true, false );
+            return false;
+        }
+    }
+
+    function onRenderTriangles(scene)
+    {
+        camera.position.x = camera_offset.x;
+        camera.position.y = camera_offset.y;
+        renderer.enableScissorTest(true);
+        // render command lists (or selected one)
+        for( var i = 0; i < gclips.length; i++ )
+        {
+            geometry.offsets[ 0 ].start = gclips[ i ].start;
+            geometry.offsets[ 0 ].index = gclips[ i ].index;
+            geometry.offsets[ 0 ].count = gclips[ i ].count;
+
+            renderer.setScissor(gclips[ i ].clip.x,
+                                (height - gclips[ i ].clip.w) ,
+                                (gclips[ i ].clip.z - gclips[ i ].clip.x),
+                                (gclips[ i ].clip.w - gclips[ i ].clip.y)
+                           );
+            
+                                
+            renderer.render( scene, camera );
         }
     }
 
