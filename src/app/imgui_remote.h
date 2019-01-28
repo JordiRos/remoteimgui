@@ -110,7 +110,7 @@ struct WebSocketServer : public IWebSocketServer
         
         return false;
     }
-	virtual void OnMessage(OpCode opcode, const void *data, int size)
+	virtual void OnMessage(OpCode opcode, const void *data, int /*size*/)
 	{
 		switch (opcode)
 		{
@@ -190,12 +190,12 @@ struct WebSocketServer : public IWebSocketServer
 				{
                     unsigned int key;
 					if (sscanf((char *)data, "ImKeyPress=%d", &key) == 1)
-						ImGui::GetIO().AddInputCharacter(key);
+						ImGui::GetIO().AddInputCharacter(ImWchar(key));
 				}
 				else if (strstr((char *)data, "ImClipboard="))
 				{
 					char *clipboard = &((char *)data)[strlen("ImClipboard=")];
-					ImGui::GetIO().SetClipboardTextFn(clipboard);
+					ImGui::GetIO().SetClipboardTextFn(nullptr, clipboard);
 				}
 				break;
 			// Binary message
@@ -356,7 +356,7 @@ struct WebSocketServer : public IWebSocketServer
 	void PreparePacketFrame(unsigned int size)//unsigned int cmd_count, unsigned int vtx_count, unsigned int idx_count)
 	{
 		IsKeyFrame = (Frame%IMGUI_REMOTE_KEY_FRAME) == 0 || ForceKeyFrame;
-		PreparePacket(IsKeyFrame ? FRAME_KEY : FRAME_DIFF, size);		
+		PreparePacket((unsigned char)(IsKeyFrame ? FRAME_KEY : FRAME_DIFF), size);		
 		//printf("ImWebSocket PreparePacket: cmd_count = %i, vtx_count = %i ( %lu bytes )\n", cmd_count, vtx_count, sizeof(unsigned int) + sizeof(unsigned int) + cmd_count * sizeof(Cmd) + vtx_count * sizeof(Vtx));
 		ForceKeyFrame = false;
 	}

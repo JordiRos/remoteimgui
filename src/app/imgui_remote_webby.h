@@ -65,7 +65,7 @@ struct IWebSocketServer
 
 		memset(&ServerConfig, 0, sizeof ServerConfig);
 		ServerConfig.bind_address = local_address;
-		ServerConfig.listening_port = local_port;
+		ServerConfig.listening_port = (unsigned short)(local_port);
 		ServerConfig.flags = WEBBY_SERVER_WEBSOCKETS;
 		ServerConfig.connection_max = 1;
 		ServerConfig.request_buffer_size = 2048;
@@ -111,7 +111,7 @@ struct IWebSocketServer
 		Client = connection;
 	}
 
-	void WsOnDisconnected(struct WebbyConnection *connection)
+	void WsOnDisconnected(struct WebbyConnection * /*connection*/)
 	{
 		Client = NULL;
 		OnMessage(Disconnect, NULL, 0);
@@ -136,7 +136,7 @@ struct IWebSocketServer
 		return 0;
 	}
 
-	virtual void OnMessage(OpCode opcode, const void *data, int size) { }
+	virtual void OnMessage(OpCode /*opcode*/, const void * /*data*/, int /*size*/) { }
 	virtual void OnError() { }
 
 	virtual void SendText(const void *data, int size)
@@ -157,18 +157,18 @@ struct IWebSocketServer
 };
 
 
-static void onLog(const char* text)
+static void onLog(const char* /*text*/)
 {
 	//printf("[WsOnLog] %s\n", text);
 }
 
-static int onDispatch(struct WebbyConnection *connection)
+static int onDispatch(struct WebbyConnection * /*connection*/)
 {
 	//printf("[WsOnDispatch] %s\n", connection->request.uri);
 	return 1;
 }
 
-static int onConnect(struct WebbyConnection *connection)
+static int onConnect(struct WebbyConnection * /*connection*/)
 {
 	//printf("[WsOnConnect] %s\n", connection->request.uri);
 	return 0;
