@@ -401,6 +401,16 @@ void RemoteInit(const char *local_address, int local_port)
 
 
 //------------------
+// RemoteShutdown
+// - shutdown RemoteImGui
+//------------------
+void RemoteShutdown()
+{
+	GServer.Shutdown();
+}
+
+
+//------------------
 // RemoteUpdate
 // - update RemoteImGui stuff
 //------------------
