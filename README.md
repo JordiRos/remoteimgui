@@ -5,7 +5,7 @@ Remote ImGui is an extension for https://github.com/ocornut/imgui (currently 1.3
 You will view all ImGui output from host app, but can also set a bigger virtual canvas and drag windows around. Use Ctrl+LeftMouse on web client to move around it.
 Client also sends input from mouse/keyboard, allowing interaction with host app.
 
-* Seems Firefox is not working at the moment, try Chrome if others do not work.
+* Using Chrome works out of the box; on Firefox you have to toggle `network.websocket.allowInsecureFromHTTPS` in `about:config` to `true`
 
 
 Setup Host
@@ -50,4 +50,3 @@ ToDo
 ============
 
 - Web client tested on iOS / Android + WebGL, but input is not handled
-- Does not work on Firefox
