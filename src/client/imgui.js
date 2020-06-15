@@ -54,6 +54,7 @@ var ImFS = [
 var ImguiGui = function() {
   this.window = 'Origin';
   this.windows = [ 'Origin' ];
+  this.connectionStatus = "disconnected"; 
 };
 
 function StartImgui( element, serveruri, targetwidth, targetheight, compressed ) {
@@ -64,6 +65,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     var datgui = new ImguiGui();
     var datgui_window = gui.add( datgui, 'window', datgui.windows );
     datgui_window.onChange( onFocusWindow );
+    var datgui_connectionStatus = gui.add(datgui, 'connectionStatus'); 
     var websocket, connecting, connected;
     var server;
 
@@ -198,6 +200,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
         console.log( "Remote ImGui: Connecting to " + serveruri + "..." );
         connecting = true;
         connected = false;
+        datgui_connectionStatus.setValue( "Connecting" ); 
         websocket = new WebSocket( serveruri );
         websocket.binaryType = "arraybuffer";
         websocket.onopen = function( evt ) {
@@ -208,6 +211,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             websocket.send("ImInit")
             gclips.length = 0;
             onRender();
+            datgui_connectionStatus.setValue( "Connected" );
         };
         websocket.onclose = function( evt ) {
             console.log( "Remote ImGui: Disconnected" );
@@ -216,6 +220,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             connected = false;
             gclips.length = 0;
             onRender();
+            datgui_connectionStatus.setValue( "Disconnected" );
         };
         websocket.onmessage = function( evt ) {
             if( typeof evt.data == "string" ) {
@@ -296,6 +301,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             connected = false;
             gclips.length = 0;
             onRender();
+            datgui_connectionStatus.setValue( "ERROR: " + evt.data );
         };
     }
 
