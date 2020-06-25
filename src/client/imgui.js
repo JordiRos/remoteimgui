@@ -160,6 +160,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     var gidxcount = 0;
     var glistcount= 0;
     var gclips = [];
+    var packetData = null;
 
     // add to element
     element.appendChild( renderer.domElement )
@@ -237,7 +238,28 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
                 if( compressed ) {
                     // log decompress time
                     //var t = performance.now();
-                    data = lz4.decompress( new Uint8Array( evt.data ) ).buffer;
+                    var u8 = new Uint8Array(evt.data);
+                    var obj = lz4.decompress(u8);
+                    // this is not the last packet in the row, so just collect data until it is
+                    if (!packetData)
+                    {
+                      packetData = new Uint8Array(obj.data);
+                    }
+                    else
+                    {
+                      // concatenate to previous packet
+                      var newPacketData = new Uint8Array(packetData.length + obj.data.length);
+                      newPacketData.set(packetData);
+                      newPacketData.set(obj.data, packetData.length);
+                      packetData = newPacketData;
+                      newPacketData = null;
+                    }
+                    if (!obj.last)
+                    {
+                      return;
+                    }
+                    data = packetData.buffer;
+                    packetData = null;
                     //console.log("Decompress: " + (performance.now() - t));
                 }
                 else

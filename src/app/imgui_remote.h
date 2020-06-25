@@ -384,13 +384,36 @@ namespace ImGui {
 		void SendPacket()
 		{
 			static int buffer[ 65536 ];
-			int size = (int) Packet.size();
-			int csize = LZ4_compress_limitedOutput( (char *) &Packet[ 0 ], (char *) ( buffer + 3 ), size, 65536 * sizeof( int ) - 12 );
-			buffer[ 0 ] = 0xBAADFEED; // Our LZ4 header magic number (used in custom lz4.js to decompress)
-			buffer[ 1 ] = size;
-			buffer[ 2 ] = csize;
+			unsigned int * bufferU32 = ( unsigned int * )buffer;
+			int originalSize = ( int )Packet.size();
+			int size = originalSize;
+			int offset = 0;
+			const unsigned int magicHeaderStart = 0xDEADDA7A; // Incomplete packet
+			const unsigned int magicHeaderEnd = 0xBAADFEED; // Final packet
+			do
+			{
+				int csize = LZ4_compress_limitedOutput( ( char * )&Packet[ offset ], ( char * )( buffer + 3 ), size, 65536 * sizeof( int ) - 12 );
+				if ( csize == 0 )
+				{
+					// If packet fails to compress, halve the data and try again
+					size /= 2;
+					continue;
+				}
+				// If this is the final packet, mark it as final and finish
+				bool isFinalPacket = offset + size == originalSize;
+				bufferU32[ 0 ] = isFinalPacket ? magicHeaderEnd : magicHeaderStart; // Our LZ4 header magic number (used in custom lz4.js to decompress)
+				bufferU32[ 1 ] = size;
+				bufferU32[ 2 ] = csize;
+				SendBinary( buffer, csize + 12 );
+				if ( isFinalPacket )
+				{
+					break;
+				}
+				// Otherwise, try to compress the rest in one go
+				offset += size;
+				size = originalSize - offset;
+			} while ( true );
 			//printf("ImWebSocket SendPacket: %s %d / %d (%.2f%%)\n", IsKeyFrame ? "(KEY)" : "", size, csize, (float)csize * 100.f / size);
-			SendBinary( buffer, csize + 12 );
 			PrevPacketSize = size;
 		}
 

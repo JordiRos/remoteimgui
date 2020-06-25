@@ -6231,7 +6231,11 @@ var lz4 = {};
         Gc = this;
     Gc.decompress = function(a) {
         var g = new DataView(a.buffer, a.byteOffset, a.byteLength);
-        3131965165 !== g.getUint32(0, true) && e(Error("lz4: invalid magic number"));
+        var magic = g.getUint32(0, true);
+        if (magic != 0xBAADFEED && magic != 0xDEADDA7A)
+        {
+          e(Error("lz4: invalid magic number"));
+        }
         var size = g.getUint32(4, true);
         var csize = g.getUint32(8, true);
         var inbuf = L(csize);
@@ -6241,7 +6245,7 @@ var lz4 = {};
 		var buf = new Uint8Array(M.subarray(outbuf, outbuf + size));
         tc(inbuf);
         tc(outbuf);
-        return buf;
+        return {data:buf, last:magic==0xBAADFEED};
     };
     r._LZ4_compressBound = Ec;
     "function" === typeof define && define.amd ? define("lz4", function() {
