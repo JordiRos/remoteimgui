@@ -137,6 +137,7 @@ namespace ImGui {
 		Vector<unsigned char> Packet;
 		Vector<unsigned char> PrevPacket;
 		RemoteInput Input;
+ 		bool Supports32BitIndexBuffers;
 
 		WebSocketServer()
 		{
@@ -145,6 +146,7 @@ namespace ImGui {
 			FrameReceived = 0;
 			IsKeyFrame = false;
 			PrevPacketSize = 0;
+			Supports32BitIndexBuffers = false;
 		}
 		inline bool mapRemoteKey( int* remoteKey, bool isCtrlPressed )
 		{
@@ -183,8 +185,13 @@ namespace ImGui {
 			case WebSocketServer::Text:
 				if ( !ClientActive )
 				{
-					if ( !memcmp( data, "ImInit", 6 ) )
+					if ( strstr( (char *) data, "ImInit" ) )
 					{
+						int supports32bitIB = 0;
+						if ( sscanf( (char *) data, "ImInit;IB32=%d", &supports32bitIB ) == 1 )
+						{
+      							Supports32BitIndexBuffers = ( supports32bitIB != 0 );
+						}
 						ClientActive = true;
 						ForceKeyFrame = true;
 						// Send confirmation
@@ -318,15 +325,26 @@ namespace ImGui {
 				a = ( vtx.col >> 24 ) & 0xff;
 			}
 		};
-		struct Idx
+		struct Idx32
 		{
-			unsigned short idx;
+			unsigned int idx;
 
 			void Set( ImDrawIdx _idx )
 			{
 				idx = _idx;
 			}
 		};
+		struct Idx16
+		{
+			unsigned short idx;
+
+			void Set( ImDrawIdx _idx )
+			{
+				assert( _idx <= 0xFFFF );
+				idx = (unsigned short) _idx;
+			}
+		};
+
 #pragma pack()
 
 		void Write( unsigned char c ) { Packet.push_back( c ); }
@@ -351,13 +369,19 @@ namespace ImGui {
 			else
 				WriteDiff( (void *) &vtx, sizeof( Vtx ) );
 		}
-
-		void Write( Idx const &idx )
+		void Write( Idx16 const &idx )
 		{
 			if ( IsKeyFrame )
-				Write( (void *) &idx, sizeof( Idx ) );
+				Write( (void *) &idx, sizeof( Idx16 ) );
 			else
-				WriteDiff( (void *) &idx, sizeof( Idx ) );
+				WriteDiff( (void *) &idx, sizeof( Idx16 ) );
+		}
+		void Write( Idx32 const &idx )
+		{
+			if ( IsKeyFrame )
+				Write( (void *) &idx, sizeof( Idx32 ) );
+			else
+				WriteDiff( (void *) &idx, sizeof( Idx32 ) );
 		}
 
 		void Write( const void *data, int size )
@@ -568,13 +592,27 @@ namespace ImGui {
 				}
 
 				// Add all idx
-				WebSocketServer::Idx idx;
-
-				int idx_remaining = idx_count;
-				while ( idx_remaining-- > 0 )
+				if ( GServer.Supports32BitIndexBuffers )
 				{
-					idx.Set( *idx_src++ );
-					GServer.Write( idx );
+					WebSocketServer::Idx32 idx;
+
+					int idx_remaining = idx_count;
+					while ( idx_remaining-- > 0 )
+					{
+						idx.Set( *idx_src++ );
+						GServer.Write( idx );
+					}
+				}
+				else
+				{
+					WebSocketServer::Idx16 idx;
+
+					int idx_remaining = idx_count;
+					while ( idx_remaining-- > 0 )
+					{
+						idx.Set( *idx_src++ );
+						GServer.Write( idx );
+					}
 				}
 
 			}

@@ -68,6 +68,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
     var datgui_connectionStatus = gui.add(datgui, 'connectionStatus'); 
     var websocket, connecting, connected;
     var server;
+    var support32BitIndices = false;
 
     var width = window.innerWidth;
     var height = window.innerHeight;
@@ -88,6 +89,10 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
 
     // renderer
     var renderer = new THREE.WebGLRenderer();
+
+    var ext = new THREE.WebGLExtensions(renderer.context);
+    support32BitIndices = ext.get("OES_element_index_uint") !== null;
+
     renderer.autoClear = false;
     renderer.setSize( width, height );
 
@@ -209,7 +214,7 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             clientactive = false;
             connecting = false;
             connected = true;
-            websocket.send("ImInit")
+            websocket.send("ImInit;IB32="+(support32BitIndices?1:0))
             gclips.length = 0;
             onRender();
             datgui_connectionStatus.setValue( "Connected" );
@@ -648,9 +653,16 @@ var touchStarted = false, // detect if a touch event is sarted
         galphas   [ aidx   ] = data.readUint8AsFloat32();
     }    
 
-    function addIdx(data, idx)
+    function addIdx( data, idx )
     {
-        gindices [ idx ] = data.readUint16();         
+        if (support32BitIndices)
+        {
+          gindices[idx] = data.readUint32();
+        }
+        else
+        {
+          gindices[idx] = data.readUint16();
+        }
     }
 
     function onRender() {
