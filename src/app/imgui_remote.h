@@ -187,15 +187,20 @@ namespace ImGui {
 				{
 					if ( strstr( (char *) data, "ImInit" ) )
 					{
+						// The browser lets us know if it can do 32-bit indexbuffers
 						int supports32bitIB = 0;
 						if ( sscanf( (char *) data, "ImInit;IB32=%d", &supports32bitIB ) == 1 )
 						{
-      							Supports32BitIndexBuffers = ( supports32bitIB != 0 );
+							Supports32BitIndexBuffers = ( supports32bitIB != 0 );
 						}
 						ClientActive = true;
 						ForceKeyFrame = true;
-						// Send confirmation
-						SendText( "ImInit", 6 );
+						// Send confirmation with the indexbuffer size we negotiated
+						// (This is for backwards compatibility, where if we don't send this header,
+						// a newer client won't increase the element size)
+						char sz[ 32 ];
+						snprintf( sz, 32, "ImInit;IB32=%d", Supports32BitIndexBuffers ? 1 : 0 );
+						SendText( sz, strlen( sz ) );
 						// Send font texture
 						unsigned char* pixels;
 						int width, height;

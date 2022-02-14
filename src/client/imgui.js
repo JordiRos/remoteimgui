@@ -229,14 +229,18 @@ function StartImgui( element, serveruri, targetwidth, targetheight, compressed )
             datgui_connectionStatus.setValue( "Disconnected" );
         };
         websocket.onmessage = function( evt ) {
-            if( typeof evt.data == "string" ) {
-                if( evt.data == "ImInit" )
-                {
-                    console.log( "ImInit OK" );
+            if (typeof evt.data == "string") {
+                var arr = evt.data.split(";");
+                if (arr[0] == "ImInit") {
+                    if (arr.indexOf("IB32=1")==-1)
+                    {
+                      support32BitIndices = false;
+                    }
+                    console.log("ImInit OK");
                     clientactive = true;
                 }
                 else
-                    console.log( "Unknown message: " + evt.data ); 
+                    console.log("Unknown message: " + evt.data);
             }
             else {
                 var data;
