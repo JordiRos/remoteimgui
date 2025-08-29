@@ -562,7 +562,7 @@ namespace ImGui {
 				int idx_count = cmd_list->IdxBuffer.size();
 				totalSize += 3 * sizeof( unsigned int ); //cmd_count, vtx_count and idx_count
 				totalSize += cmd_count * sizeof( WebSocketServer::Cmd ) + vtx_count * sizeof( WebSocketServer::Vtx );
-				totalSize += GServer.Supports32BitIndexBuffers ? ( idx_count * sizeof( WebSocketServer::Idx32 ) ) ? ( idx_count * sizeof( WebSocketServer::Idx16 ) );
+				totalSize += GServer.Supports32BitIndexBuffers ? ( idx_count * sizeof( WebSocketServer::Idx32 ) ) : ( idx_count * sizeof( WebSocketServer::Idx16 ) );
 			}
 
 			GServer.PreparePacketFrame( totalSize );
