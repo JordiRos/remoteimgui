@@ -65,13 +65,20 @@
 
 		function onClickConnect() {
 			var host = document.getElementById('host').value;
-			var port = 7002;
-			if (host != "") {
+			var DEFAULT_PORT = 7002;
+			if (host != "") 
+      {
+        if (host.indexOf(":")==-1)
+        {
+          host += ":" + DEFAULT_PORT;
+        }
 				if(localStorage)
+        {
 					localStorage.setItem("imgui_host", host);
+        }
 				document.getElementById("imgui_connect").style.display = 'none';
-				StartImgui( document.getElementById( 'imgui_container' ), "ws://" + host + ":" + port, 1920, 1080, true );
-         	}
+				StartImgui( document.getElementById( 'imgui_container' ), "ws://" + host, 1920, 1080, true );
+     	}
 		}		
     </script>
 
